@@ -15,6 +15,13 @@ import unittest
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 MOON_QML = PROJECT_ROOT / "Services" / "Moon.qml"
 NOTIFICATIONS_QML = PROJECT_ROOT / "Modules" / "Notifications" / "Notifications.qml"
+SHELL_STATE_QML = PROJECT_ROOT / "Services" / "ShellState.qml"
+OVERLAY_COORDINATOR_QML = PROJECT_ROOT / "Services" / "OverlayCoordinator.qml"
+SERVICES_QMLDIR = PROJECT_ROOT / "Services" / "qmldir"
+SHELL_QML = PROJECT_ROOT / "shell.qml"
+LAUNCHER_QML = PROJECT_ROOT / "Modules" / "Launcher" / "Launcher.qml"
+DASHBOARD_QML = PROJECT_ROOT / "Modules" / "Dashboard" / "Dashboard.qml"
+POWER_MENU_QML = PROJECT_ROOT / "Modules" / "PowerMenu" / "PowerMenu.qml"
 
 
 class SeleneCorrectionContracts(unittest.TestCase):
@@ -40,14 +47,12 @@ class SeleneCorrectionContracts(unittest.TestCase):
             0,
             f"Moon.qml must pass the actionable qmllint check:\n{diagnostics}",
         )
-
     def test_critical_notification_timer_does_not_use_infinity(self) -> None:
         source = NOTIFICATIONS_QML.read_text(encoding="utf-8")
         self.assertFalse(
             "Infinity" in source,
             "A QML Timer interval is an integer and must not be assigned Infinity",
         )
-
     def test_critical_notification_timer_is_disabled(self) -> None:
         source = NOTIFICATIONS_QML.read_text(encoding="utf-8")
         critical_timer_disabled = re.search(
@@ -57,7 +62,6 @@ class SeleneCorrectionContracts(unittest.TestCase):
             critical_timer_disabled,
             "Critical notifications must disable their expiration Timer",
         )
-
     def test_notification_timer_uses_expire_timeout_milliseconds_directly(self) -> None:
         source = NOTIFICATIONS_QML.read_text(encoding="utf-8")
         timer = re.search(r"Timer\s*\{.*?running\s*:\s*!popup\.critical", source, re.DOTALL)
@@ -74,7 +78,6 @@ class SeleneCorrectionContracts(unittest.TestCase):
             r"\?\s*popup\.n\.expireTimeout\s*:\s*5000",
             "Positive expireTimeout must be used directly with a finite 5000 ms fallback",
         )
-
     def test_popup_dismiss_layer_precedes_action_content(self) -> None:
         source = NOTIFICATIONS_QML.read_text(encoding="utf-8")
         dismiss = re.search(
@@ -91,6 +94,79 @@ class SeleneCorrectionContracts(unittest.TestCase):
             "Popup-wide dismiss MouseArea must be declared before action content so "
             "the later action controls remain above it in sibling stacking order",
         )
+    def test_overlay_coordinator_state_is_private_and_barrier_free(self) -> None:
+        source = OVERLAY_COORDINATOR_QML.read_text(encoding="utf-8")
+        self.assertRegex(source, r"property\s+string\s+_activeKind\s*:")
+        self.assertRegex(source, r"property\s+var\s+_targetScreen\s*:")
+        for token in ("_screenReady", "_readyGeneration", "screenReady", "_markReady", "Qt.callLater"):
+            self.assertNotIn(token, source, f"OverlayCoordinator must not retain barrier token {token!r}")
+    def test_overlay_coordinator_public_projections_are_readonly(self) -> None:
+        source = OVERLAY_COORDINATOR_QML.read_text(encoding="utf-8")
+        for name in ("activeKind", "targetScreen", "launcherOpen", "dashboardOpen", "powerOpen"):
+            self.assertRegex(source, rf"readonly\s+property\s+\w+\s+{name}\b")
+    def test_qmldir_registers_overlay_coordinator_singleton(self) -> None:
+        self.assertIn(
+            "singleton OverlayCoordinator OverlayCoordinator.qml",
+            SERVICES_QMLDIR.read_text(encoding="utf-8"),
+        )
+    def test_shell_state_no_longer_declares_overlay_booleans(self) -> None:
+        source = SHELL_STATE_QML.read_text(encoding="utf-8")
+        for name in ("launcherOpen", "dashboardOpen", "powerOpen", "toggleLauncher", "toggleDashboard", "togglePower"):
+            self.assertNotIn(name, source)
+    def test_no_external_assignment_to_coordinator_private_state(self) -> None:
+        for path in PROJECT_ROOT.rglob("*.qml"):
+            if path.name == "OverlayCoordinator.qml":
+                continue
+            source = path.read_text(encoding="utf-8")
+            for prop in ("_activeKind", "_targetScreen", "activeKind", "targetScreen"):
+                self.assertNotRegex(
+                    source,
+                    rf"OverlayCoordinator\.{prop}\s*=[^=]",
+                    f"{path.name} must not assign OverlayCoordinator.{prop}",
+                )
+    def test_shell_qml_instantiates_each_overlay_via_variants_over_screens(self) -> None:
+        source = SHELL_QML.read_text(encoding="utf-8")
+        for kind in ("Launcher", "Dashboard", "PowerMenu"):
+            self.assertRegex(
+                source,
+                rf"Variants\s*\{{\s*model:\s*Quickshell\.screens\s*{kind}\s*\{{\s*\}}\s*\}}",
+                f"{kind} must be instantiated through a Variants composition over Quickshell.screens",
+            )
+    def test_overlay_modules_bind_fixed_screen_to_modelData(self) -> None:
+        for path in (LAUNCHER_QML, DASHBOARD_QML, POWER_MENU_QML):
+            source = path.read_text(encoding="utf-8")
+            self.assertRegex(source, r"\bproperty\s+var\s+modelData\b", f"{path.name} must declare modelData")
+            self.assertIn("screen: modelData", source, f"{path.name} must bind screen to modelData")
+    def test_overlay_visibility_and_focus_gated_by_kind_and_target_identity(self) -> None:
+        for path, kind in ((LAUNCHER_QML, "launcher"), (DASHBOARD_QML, "dashboard"), (POWER_MENU_QML, "power")):
+            source = path.read_text(encoding="utf-8")
+            gate = rf"OverlayCoordinator\.{kind}Open\s*&&\s*OverlayCoordinator\.targetScreen\s*===\s*modelData"
+            self.assertRegex(source, rf"visible:\s*{gate}", f"{path.name} visible must be gated")
+            self.assertRegex(source, rf"focusable:\s*{gate}", f"{path.name} focusable must be gated")
+    def test_shell_qml_ipc_uses_coordinator_for_overlay_toggles(self) -> None:
+        source = SHELL_QML.read_text(encoding="utf-8")
+        for kind in ("Launcher", "Dashboard", "Power"):
+            self.assertRegex(
+                source,
+                rf"function\s+toggle{kind}\s*\(\)\s*\{{[^}}]*OverlayCoordinator\.resolveFocusedScreen\s*\(\)",
+                f"toggle{kind} must resolve the focused screen",
+            )
+            self.assertRegex(
+                source,
+                rf"function\s+toggle{kind}\s*\(\)\s*\{{[^}}]*OverlayCoordinator\.toggle\s*\(",
+                f"toggle{kind} must invoke OverlayCoordinator.toggle",
+            )
+    def test_overlay_coordinator_apply_orders_assignments(self) -> None:
+        body = re.search(
+            r"function\s+apply\s*\(\s*result\s*\)\s*\{([^{}]*(\{[^{}]*\}[^{}]*)*)\}",
+            OVERLAY_COORDINATOR_QML.read_text(encoding="utf-8"),
+        ).group(1)
+        assignments = re.findall(r"\b(_activeKind|_targetScreen)\s*=", body)
+        first_kind, first_target = assignments.index("_activeKind"), assignments.index("_targetScreen")
+        last_kind = len(assignments) - 1 - assignments[::-1].index("_activeKind")
+        last_target = len(assignments) - 1 - assignments[::-1].index("_targetScreen")
+        self.assertLess(first_kind, first_target, "_activeKind must be cleared before _targetScreen")
+        self.assertLess(last_target, last_kind, "_targetScreen must be assigned before final _activeKind")
 
 
 if __name__ == "__main__":

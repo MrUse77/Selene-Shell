@@ -34,22 +34,31 @@ ShellRoot {
         HistoryPopup {}
     }
 
-    Launcher {}
+    Variants {
+        model: Quickshell.screens
+        Launcher {}
+    }
 
-    Dashboard {}
+    Variants {
+        model: Quickshell.screens
+        Dashboard {}
+    }
 
     Notifications {}
 
     Osd {}
 
-    PowerMenu {}
+    Variants {
+        model: Quickshell.screens
+        PowerMenu {}
+    }
 
     IpcHandler {
         target: "selene"
 
-        function toggleLauncher() { ShellState.toggleLauncher() }
-        function toggleDashboard() { ShellState.toggleDashboard() }
-        function togglePower() { ShellState.togglePower() }
+        function toggleLauncher() { OverlayCoordinator.toggle("launcher", { source: "ipc", screen: OverlayCoordinator.resolveFocusedScreen(), explicit: true }); }
+        function toggleDashboard() { OverlayCoordinator.toggle("dashboard", { source: "ipc", screen: OverlayCoordinator.resolveFocusedScreen(), explicit: true }); }
+        function togglePower() { OverlayCoordinator.toggle("power", { source: "ipc", screen: OverlayCoordinator.resolveFocusedScreen(), explicit: true }); }
         function themeReload() { Theme.reloadTheme() }
         function dnd() { ShellState.dnd = !ShellState.dnd }
         function clearNotifs() { ShellState.clearHistory() }

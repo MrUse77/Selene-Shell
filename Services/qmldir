@@ -5,3 +5,4 @@ singleton Hardware Hardware.qml
 singleton Audio Audio.qml
 singleton Updates Updates.qml
 singleton ShellState ShellState.qml
+singleton OverlayCoordinator OverlayCoordinator.qml

@@ -16,11 +16,9 @@ PanelWindow {
     exclusionMode: ExclusionMode.Ignore
     id: root
 
-    readonly property var targetScreen:
-        Quickshell.screens.find(s => s.name === (Hyprland.focusedMonitor?.name ?? ""))
-        ?? Quickshell.screens[0] ?? null
+    property var modelData
 
-    screen: targetScreen
+    screen: modelData
     anchors {
         top: true
         left: true
@@ -28,8 +26,8 @@ PanelWindow {
         bottom: true
     }
     color: Theme.alpha(Theme.bgDeep, 0.55)
-    visible: ShellState.launcherOpen
-    focusable: ShellState.launcherOpen
+    visible: OverlayCoordinator.launcherOpen && OverlayCoordinator.targetScreen === modelData
+    focusable: OverlayCoordinator.launcherOpen && OverlayCoordinator.targetScreen === modelData
 
     property var results: []
     property int selected: 0
@@ -47,7 +45,7 @@ PanelWindow {
     }
 
     function close() {
-        ShellState.launcherOpen = false;
+        OverlayCoordinator.close("launcher");
     }
 
     // Coincidencia fuzzy por subsecuencia con bonus de racha.
@@ -108,8 +106,8 @@ PanelWindow {
     Rectangle {
         id: card
         anchors.centerIn: parent
-        width: Math.min(620, (root.targetScreen?.width ?? 640) - 60)
-        height: Math.min(520, (root.targetScreen?.height ?? 700) - 120)
+        width: Math.min(620, (modelData?.width ?? 640) - 60)
+        height: Math.min(520, (modelData?.height ?? 700) - 120)
         radius: Theme.rCard
         color: Theme.alpha(Theme.bg, 0.97)
         border.width: 1

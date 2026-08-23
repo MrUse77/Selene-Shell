@@ -5,8 +5,10 @@ import "../../Components"
 BarWidget {
     id: root
 
+    property var screen: null
+
     hoverable: true
-    active: ShellState.powerOpen
+    active: OverlayCoordinator.powerOpen
 
     height: 32
     width: 38
@@ -22,6 +24,10 @@ BarWidget {
     MouseArea {
         anchors.fill: parent
         cursorShape: Qt.PointingHandCursor
-        onClicked: ShellState.togglePower()
+        onClicked: OverlayCoordinator.toggle("power", {
+            source: "widget",
+            screen: root.screen,
+            explicit: true
+        })
     }
 }

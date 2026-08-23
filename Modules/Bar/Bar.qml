@@ -27,8 +27,7 @@ PanelWindow {
     exclusiveZone: 44
     color: "transparent"
 
-    readonly property bool anyOverlay:
-        ShellState.launcherOpen || ShellState.dashboardOpen || ShellState.powerOpen
+    readonly property bool anyOverlay: OverlayCoordinator.isOpen
 
     component Divider: Item {
         width: 10
@@ -69,7 +68,7 @@ PanelWindow {
                 // Orbe launcher (\uF303 = glifo Arch de Nerd Font)
                 BarWidget {
                     hoverable: true
-                    active: ShellState.launcherOpen
+                    active: OverlayCoordinator.launcherOpen
                     width: 42
                     height: 32
 
@@ -84,7 +83,11 @@ PanelWindow {
                     MouseArea {
                         anchors.fill: parent
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: ShellState.toggleLauncher()
+                        onClicked: OverlayCoordinator.toggle("launcher", {
+                            source: "widget",
+                            screen: root.modelData,
+                            explicit: true
+                        })
                     }
                 }
 
@@ -107,7 +110,9 @@ PanelWindow {
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: 0
 
-                MediaWidget {}
+                MediaWidget {
+                    screen: root.modelData
+                }
 
                 Divider {}
 
@@ -130,7 +135,7 @@ PanelWindow {
                 // Botón del dashboard (centro de control)
                 BarWidget {
                     hoverable: true
-                    active: ShellState.dashboardOpen
+                    active: OverlayCoordinator.dashboardOpen
                     width: 40
                     height: 32
 
@@ -145,11 +150,17 @@ PanelWindow {
                     MouseArea {
                         anchors.fill: parent
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: ShellState.toggleDashboard()
+                        onClicked: OverlayCoordinator.toggle("dashboard", {
+                            source: "widget",
+                            screen: root.modelData,
+                            explicit: true
+                        })
                     }
                 }
 
-                PowerButton {}
+                PowerButton {
+                    screen: root.modelData
+                }
             }
         }
     }

@@ -14,11 +14,9 @@ PanelWindow {
     exclusionMode: ExclusionMode.Ignore
     id: root
 
-    readonly property var targetScreen:
-        Quickshell.screens.find(s => s.name === (Hyprland.focusedMonitor?.name ?? ""))
-        ?? Quickshell.screens[0] ?? null
+    property var modelData
 
-    screen: targetScreen
+    screen: modelData
     anchors {
         top: true
         left: true
@@ -26,15 +24,15 @@ PanelWindow {
         bottom: true
     }
     color: Theme.alpha(Theme.bgDeep, 0.6)
-    visible: ShellState.powerOpen
-    focusable: ShellState.powerOpen
+    visible: OverlayCoordinator.powerOpen && OverlayCoordinator.targetScreen === modelData
+    focusable: OverlayCoordinator.powerOpen && OverlayCoordinator.targetScreen === modelData
 
     onVisibleChanged: {
         if (visible) content.forceActiveFocus();
     }
 
     function close() {
-        ShellState.powerOpen = false;
+        OverlayCoordinator.close("power");
     }
 
     MouseArea {

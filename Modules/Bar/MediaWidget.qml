@@ -7,6 +7,8 @@ import "../../Components"
 BarWidget {
     id: root
 
+    property var screen: null
+
     hoverable: true
 
     readonly property var player: Mpris.activePlayer
@@ -44,7 +46,11 @@ BarWidget {
         anchors.fill: parent
         cursorShape: Qt.PointingHandCursor
         onClicked: {
-            ShellState.dashboardOpen = true;
+            OverlayCoordinator.open("dashboard", {
+                source: "widget",
+                screen: root.screen,
+                explicit: true
+            });
         }
     }
 }

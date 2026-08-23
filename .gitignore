@@ -1,3 +1,4 @@
 # Local agent runtime state
 .atl/
+.codegraph/
 .zcode/plans/

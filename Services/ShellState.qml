@@ -7,11 +7,6 @@ import QtQuick
 Item {
     id: root
 
-    // Overlays (se abren en el monitor enfocado)
-    property bool launcherOpen: false
-    property bool dashboardOpen: false
-    property bool powerOpen: false
-
     // Calendario por barra
     property bool calendarOpen: false
     property string calendarScreen: ""
@@ -26,10 +21,6 @@ Item {
     readonly property ListModel history: ListModel {}
 
     readonly property int historyCap: 20
-
-    function toggleLauncher() { launcherOpen = !launcherOpen }
-    function toggleDashboard() { dashboardOpen = !dashboardOpen }
-    function togglePower() { powerOpen = !powerOpen }
 
     function toggleCalendar(screenName) {
         if (calendarOpen && calendarScreen === screenName) {

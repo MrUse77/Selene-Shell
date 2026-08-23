@@ -118,29 +118,26 @@ Los cierres por Escape, clic exterior, selección de aplicación y acciones equi
 
 ## Ventanas, foco y fullscreen
 
-`Launcher.qml`, `Dashboard.qml` y `PowerMenu.qml` sustituyen su `targetScreen` reactivo basado en `Hyprland.focusedMonitor` por:
+`Launcher.qml`, `Dashboard.qml` y `PowerMenu.qml` se instancian una vez por pantalla en `shell.qml` mediante `Variants { model: Quickshell.screens; ... }`. Cada instancia declara `property var modelData`, fija `screen: modelData` y nunca la retargetea. La visibilidad y el foco se compuertan con dos condiciones simultáneas:
 
 ```qml
-screen: OverlayCoordinator.targetScreen
-visible: OverlayCoordinator.<kind>Open
-focusable: OverlayCoordinator.<kind>Open
+visible: OverlayCoordinator.<kind>Open && OverlayCoordinator.targetScreen === modelData
+focusable: OverlayCoordinator.<kind>Open && OverlayCoordinator.targetScreen === modelData
 ```
 
-Sus tamaños que dependen de `targetScreen` pasan a usar la referencia del coordinador. La referencia sólo cambia al abrir otro kind o al cerrar, nunca por foco. Se preservan `WlrLayer.Overlay`, `ExclusionMode.Ignore`, anclajes, márgenes, color, componentes, animaciones y el foco inicial existente. `focusable` permanece verdadero mientras el overlay explícito esté abierto, de modo que puede cubrir fullscreen; el permiso depende de `origin.explicit`, no de una relajación visual o de layer-shell.
-
-Como los únicos disparadores migrados son clics y comandos IPC directos, todos son explícitos. El contrato de `open` rechaza `passive` cuando la pantalla objetivo tiene fullscreen, usando la consulta de Hyprland disponible en el momento de transición; si la API no puede establecerlo con certeza, falla cerrada para `passive`. No se bloquea una acción explícita por fullscreen. No se aplicará `HyprlandFocusGrab` a estos overlays: calendario e historial conservan su patrón actual, independiente del coordinador.
+Sólo la instancia cuya pantalla coincide con `OverlayCoordinator.targetScreen` se vuelve visible; las demás permanecen ocultas. Los tamaños que dependen de la pantalla usan `modelData`. Se preservan `WlrLayer.Overlay`, `ExclusionMode.Ignore`, anclajes, márgenes, color, componentes, animaciones y el foco inicial. `focusable` permanece verdadero mientras el overlay esté abierto para poder cubrir fullscreen. El permiso depende de `origin.explicit`. No se aplica `HyprlandFocusGrab` a estos overlays.
 
 ## Mapa de migración
 
 | Archivo / consumidor | Cambio | Autoridad posterior |
 |---|---|---|
-| `Services/OverlayCoordinator.qml` | nuevo reducer, validación de origen, resolución IPC y cierre hotplug | coordinador |
+| `Services/OverlayCoordinator.qml` | reducer síncrono, validación de origen, resolución IPC y cierre hotplug | coordinador |
 | `Services/qmldir` | registra el singleton | registro QML |
 | `Services/ShellState.qml` | retira sólo los tres booleans/toggles interactivos | conserva estados no relacionados |
-| `shell.qml` | IPC captura monitor y llama al coordinador | coordinador para los tres IPC; ShellState para calendario/historial/DND/notifs |
-| `Modules/Launcher/Launcher.qml` | `screen`, `visible`, `focusable`, `close` | coordinador |
-| `Modules/Dashboard/Dashboard.qml` | `screen`, `visible`, `focusable` | coordinador; DND queda ShellState |
-| `Modules/PowerMenu/PowerMenu.qml` | `screen`, `visible`, `focusable`, `close` | coordinador |
+| `shell.qml` | instancia Launcher/Dashboard/PowerMenu vía `Variants` por pantalla; IPC captura monitor y llama al coordinador | coordinador |
+| `Modules/Launcher/Launcher.qml` | `property var modelData`; `screen: modelData`; visible/focusable por kind + identidad de pantalla; `close` | coordinador |
+| `Modules/Dashboard/Dashboard.qml` | `property var modelData`; `screen: modelData`; visible/focusable por kind + identidad de pantalla | coordinador; DND queda ShellState |
+| `Modules/PowerMenu/PowerMenu.qml` | `property var modelData`; `screen: modelData`; visible/focusable por kind + identidad de pantalla; `close` | coordinador |
 | `Modules/Bar/Bar.qml` | indicador, estados activos y clics; inyecta `modelData` a Media/Power | coordinador |
 | `Modules/Bar/MediaWidget.qml` | declara `screen`; abre dashboard con origen widget | coordinador |
 | `Modules/Bar/PowerButton.qml` | declara `screen`; activo/clic desde coordinador | coordinador |

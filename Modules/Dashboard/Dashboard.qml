@@ -16,13 +16,11 @@ PanelWindow {
     exclusionMode: ExclusionMode.Ignore
     id: root
 
-    readonly property var targetScreen:
-        Quickshell.screens.find(s => s.name === (Hyprland.focusedMonitor?.name ?? ""))
-        ?? Quickshell.screens[0] ?? null
+    property var modelData
 
     readonly property var player: Mpris.activePlayer
 
-    screen: targetScreen
+    screen: modelData
     anchors {
         top: true
         right: true
@@ -35,11 +33,11 @@ PanelWindow {
     }
     implicitWidth: 470
     color: "transparent"
-    visible: ShellState.dashboardOpen
+    visible: OverlayCoordinator.dashboardOpen && OverlayCoordinator.targetScreen === modelData
     // Hyprland renderiza fullscreen por encima de toda capa layer-shell
     // salvo que la superficie tenga foco de teclado: con focusable mientras
     // está abierto, el dashboard queda encima incluso de ventanas fullscreen.
-    focusable: ShellState.dashboardOpen
+    focusable: OverlayCoordinator.dashboardOpen && OverlayCoordinator.targetScreen === modelData
 
     onVisibleChanged: {
         Hardware.active = true;
