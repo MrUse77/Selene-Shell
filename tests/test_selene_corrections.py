@@ -28,8 +28,7 @@ class SeleneCorrectionContracts(unittest.TestCase):
     def test_moon_has_no_qmllint_unqualified_access(self) -> None:
         result = subprocess.run(
             [
-                "qmllint",
-                "-U",
+                "/usr/lib/qt6/bin/qmllint",
                 "-I",
                 "/usr/lib/qt6/qml",
                 "-i",
@@ -167,6 +166,63 @@ class SeleneCorrectionContracts(unittest.TestCase):
         last_target = len(assignments) - 1 - assignments[::-1].index("_targetScreen")
         self.assertLess(first_kind, first_target, "_activeKind must be cleared before _targetScreen")
         self.assertLess(last_target, last_kind, "_targetScreen must be assigned before final _activeKind")
+
+    def test_launcher_resolves_desktop_icon_names_with_fallback(self) -> None:
+        source = LAUNCHER_QML.read_text(encoding="utf-8")
+        self.assertRegex(
+            source,
+            r"source\s*:\s*Quickshell\.iconPath\(\s*modelData\.icon\s*\?\?\s*\"\"\s*,\s*"
+            r"\"application-x-executable\"\s*\)",
+            "Desktop entry icon names must be resolved with an executable icon fallback",
+        )
+
+    def test_launcher_exposes_all_sorted_matching_results(self) -> None:
+        source = LAUNCHER_QML.read_text(encoding="utf-8")
+        self.assertRegex(
+            source,
+            r"results\s*=\s*scored\.map\(x\s*=>\s*x\.app\)",
+            "Every sorted matching application must be exposed to the launcher ListView",
+        )
+        self.assertNotRegex(
+            source,
+            r"scored\.slice\(",
+            "Launcher results must not be truncated by an arbitrary fixed cap",
+        )
+
+    def test_launcher_list_current_index_tracks_and_contains_keyboard_selection(self) -> None:
+        source = LAUNCHER_QML.read_text(encoding="utf-8")
+        self.assertRegex(
+            source,
+            r"(?s)ListView\s*\{.*?currentIndex:\s*root\.selected\b",
+            "ListView.currentIndex must track root.selected",
+        )
+        self.assertRegex(
+            source,
+            r"(?s)ListView\s*\{.*?onCurrentIndexChanged\s*:\s*\{?\s*"
+            r"(?:if\s*\([^)]*\)\s*)?"
+            r"(?:list\.)?positionViewAtIndex\(\s*(?:list\.)?currentIndex\s*,\s*"
+            r"ListView\.Contain\s*\)",
+            "Every currentIndex change must explicitly keep the selected result in the viewport",
+        )
+
+    def test_launcher_delegate_declares_and_uses_required_index(self) -> None:
+        source = LAUNCHER_QML.read_text(encoding="utf-8")
+        self.assertRegex(
+            source,
+            r"delegate:\s*Rectangle\s*\{\s*id:\s*resultDelegate\s*"
+            r"required\s+property\s+var\s+modelData\s*"
+            r"required\s+property\s+int\s+index\b",
+            "The launcher delegate must explicitly declare the ListView index role",
+        )
+        self.assertNotRegex(
+            source,
+            r"readonly\s+property\s+int\s+idx\s*:\s*index\b",
+            "The broken implicit index bridge must not remain",
+        )
+        self.assertRegex(source, r"color:\s*resultDelegate\.index\s*===\s*root\.selected\b")
+        self.assertRegex(source, r"border\.width:\s*resultDelegate\.index\s*===\s*root\.selected\b")
+        self.assertRegex(source, r"onPositionChanged:\s*root\.selected\s*=\s*resultDelegate\.index\b")
+        self.assertRegex(source, r"onClicked:\s*\{\s*root\.selected\s*=\s*resultDelegate\.index\s*;")
 
 
 if __name__ == "__main__":

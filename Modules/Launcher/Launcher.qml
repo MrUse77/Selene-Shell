@@ -79,7 +79,7 @@ PanelWindow {
             if (s > 0) scored.push({ app: app, score: s });
         }
         scored.sort((a, b) => b.score - a.score);
-        results = scored.slice(0, 9).map(x => x.app);
+        results = scored.map(x => x.app);
     }
 
     function accept() {
@@ -198,18 +198,24 @@ PanelWindow {
                 width: parent.width
                 height: parent.height - 130
                 clip: true
-                spacing: 4
+                spacing: 2
                 model: root.results
+                currentIndex: root.selected
+                onCurrentIndexChanged: {
+                    if (currentIndex >= 0)
+                        positionViewAtIndex(currentIndex, ListView.Contain);
+                }
 
                 delegate: Rectangle {
+                    id: resultDelegate
                     required property var modelData
-                    readonly property int idx: index
+                    required property int index
 
                     width: list.width
-                    height: 52
+                    height: 38
                     radius: Theme.rInner
-                    color: idx === root.selected ? Theme.alpha(Theme.accent, 0.14) : "transparent"
-                    border.width: idx === root.selected ? 1 : 0
+                    color: resultDelegate.index === root.selected ? Theme.alpha(Theme.accent, 0.14) : "transparent"
+                    border.width: resultDelegate.index === root.selected ? 1 : 0
                     border.color: Theme.alpha(Theme.accent, 0.35)
 
                     Behavior on color {
@@ -225,7 +231,7 @@ PanelWindow {
                             anchors.verticalCenter: parent.verticalCenter
                             width: 30
                             height: 30
-                            source: modelData.icon ?? ""
+                            source: Quickshell.iconPath(modelData.icon ?? "", "application-x-executable")
                         }
 
                         Column {
@@ -256,9 +262,9 @@ PanelWindow {
                         anchors.fill: parent
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onPositionChanged: root.selected = parent.idx
+                        onPositionChanged: root.selected = resultDelegate.index
                         onClicked: {
-                            root.selected = parent.idx;
+                            root.selected = resultDelegate.index;
                             root.accept();
                         }
                     }
