@@ -1,0 +1,46 @@
+schema: spec-driven
+
+context: |
+  Project: Selene — la shell de MoonArch (Quickshell/QML)
+  Root path: /home/agustin/Dev/Lab/QML
+
+  Stack overview:
+    - Runtime: Quickshell (quickshell-git del AUR), configs en QML/QtQuick
+    - Ejecución: symlink ~/.config/quickshell/selene -> este repo; `qs -c selene`
+    - Compositor: Hyprland (Wayland), config nativa en Lua (~/.config/hypr/hyprland.lua)
+    - Theming: moonarch (~/.local/share/moonarch/themes/<id>/, symlink `current`);
+      Selene deriva su paleta de ghostty.conf + waybar.css del bundle activo
+    - Servicios del sistema: PipeWire/WirePlumber, NetworkManager, Bluetooth, MPRIS
+    - Hardware: desktop sin batería ni backlight, 2 monitores 1080p (DP-2, HDMI-A-1)
+    - Idioma de artefactos y código: español; íconos solo glifos Nerd Font
+
+  Convenciones:
+    - Arquitectura: shell.qml fino + Services/ (singletons) + Components/ + Modules/
+    - Identidad visual propia (lunar: cápsulas, glow tenue, fase lunar); no copiar
+      el diseño de caelestia ni waybar
+    - Animaciones: beziers de hyprland.lua (smooth, easeOutQuint, overshot, gentle)
+      como easing.bezierCurve, duraciones ≈ 1000/speed ms
+    - Coexistencia: no tocar hyprland.lua, autostart, ni configs de waybar/eww/dunst/
+      rofi; la integración oficial con moonarch se planifica en changes aparte
+
+# Per-artifact rules (optional)
+# Add custom rules for specific artifacts.
+# Example:
+#   rules:
+#     proposal:
+#       - Keep proposals under 500 words
+#       - Always include a "Non-goals" section
+#     tasks:
+#       - Break tasks into chunks of max 2 hours
+
+# Per-operation guidance (optional)
+# Add advisory guidance for how apply and archive work should be conducted.
+# This is separate from artifact rules above.
+# Example:
+#   operations:
+#     apply:
+#       guidance:
+#         - Keep test summaries concise
+#     archive:
+#       guidance:
+#         - Summarize the archive outcome before finishing

@@ -1,0 +1,13 @@
+Bar Bar.qml
+CalendarPopup CalendarPopup.qml
+HistoryPopup HistoryPopup.qml
+NotifsWidget NotifsWidget.qml
+Workspaces Workspaces.qml
+WindowTitle WindowTitle.qml
+ClockWidget ClockWidget.qml
+AudioWidget AudioWidget.qml
+HardwareWidget HardwareWidget.qml
+UpdatesWidget UpdatesWidget.qml
+Tray Tray.qml
+MediaWidget MediaWidget.qml
+PowerButton PowerButton.qml
