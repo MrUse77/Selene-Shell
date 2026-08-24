@@ -1,5 +1,4 @@
 import QtQuick
-import Quickshell.Services.Mpris
 import "../../Services"
 import "../../Components"
 
@@ -11,8 +10,8 @@ BarWidget {
 
     hoverable: true
 
-    readonly property var player: Mpris.activePlayer
-    readonly property bool hasMedia: player != null && player.trackTitle !== ""
+    readonly property var player: Media.player
+    readonly property bool hasMedia: player != null && Media.hasMetadata
 
     visible: hasMedia
     height: 32

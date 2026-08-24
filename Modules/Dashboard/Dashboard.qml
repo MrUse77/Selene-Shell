@@ -3,7 +3,6 @@ import Quickshell
 import Quickshell.Wayland
 import Quickshell.Hyprland
 import Quickshell.Io
-import Quickshell.Services.Mpris
 import "../../Services"
 import "../../Components"
 
@@ -18,7 +17,7 @@ PanelWindow {
 
     property var modelData
 
-    readonly property var player: Mpris.activePlayer
+    readonly property var player: Media.player
 
     screen: modelData
     anchors {
@@ -71,14 +70,6 @@ PanelWindow {
         const m = Math.floor(sec / 60);
         const s = Math.floor(sec % 60);
         return m + ":" + String(s).padStart(2, "0");
-    }
-
-    // Ticker de posición MPRIS (position no es reactivo por sí solo)
-    readonly property Timer posTicker: Timer {
-        interval: 1000
-        running: root.visible && root.player?.isPlaying === true
-        repeat: true
-        onTriggered: root.player?.positionChanged()
     }
 
     // Drawer deslizante
@@ -335,47 +326,112 @@ PanelWindow {
                 // ---- Medios ----
                 Card {
                     width: parent.width
-                    height: root.player && root.player.trackTitle !== "" ? 130 : 64
-                    visible: root.player != null
+                    height: !Media.hasPlayers ? 64 : Media.hasMetadata ? 210 : 94
+
+                    Text {
+                        anchors.centerIn: parent
+                        visible: !Media.hasPlayers
+                        text: "No media players"
+                        color: Theme.textDim
+                        font.family: Theme.font
+                        font.pixelSize: 13
+                    }
 
                     Column {
-                        anchors.centerIn: parent
+                        anchors.fill: parent
+                        anchors.margins: 14
+                        visible: Media.hasPlayers
                         spacing: 8
 
-                        // Estado vacío
+                        Row {
+                            width: parent.width
+                            height: 20
+                            spacing: 8
+
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: parent.width - (Media.playerCount > 1 ? 104 : 0)
+                                text: Media.identity
+                                elide: Text.ElideRight
+                                color: Theme.textDim
+                                font.family: Theme.font
+                                font.pixelSize: 11
+                            }
+
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                visible: Media.playerCount > 1
+                                text: "󰒮"
+                                color: Theme.text
+                                font.family: Theme.font
+                                font.pixelSize: 14
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: Media.selectPreviousPlayer()
+                                }
+                            }
+
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                visible: Media.playerCount > 1
+                                text: (Media.playerIndex + 1) + "/" + Media.playerCount
+                                color: Theme.textDim
+                                font.family: Theme.fontMono
+                                font.pixelSize: 10
+                            }
+
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                visible: Media.playerCount > 1
+                                text: "󰒭"
+                                color: Theme.text
+                                font.family: Theme.font
+                                font.pixelSize: 14
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: Media.selectNextPlayer()
+                                }
+                            }
+                        }
+
                         Text {
-                            visible: !(root.player?.trackTitle ?? "")
                             anchors.horizontalCenter: parent.horizontalCenter
-                            text: "󰎌  sin reproducción"
+                            visible: !Media.hasMetadata
+                            text: "Nothing playing"
                             color: Theme.textDim
                             font.family: Theme.font
                             font.pixelSize: 13
                         }
 
                         Row {
-                            visible: (root.player?.trackTitle ?? "") !== ""
-                            spacing: 14
+                            width: parent.width
+                            height: 96
+                            visible: Media.hasMetadata
+                            spacing: 12
 
                             Rectangle {
-                                anchors.verticalCenter: parent.verticalCenter
-                                width: 88
-                                height: 88
+                                width: 96
+                                height: 96
                                 radius: Theme.rInner
                                 color: Theme.alpha(Theme.accent, 0.12)
                                 clip: true
 
                                 Image {
+                                    id: artwork
                                     anchors.fill: parent
-                                    visible: (root.player?.trackArtUrl ?? "") !== ""
-                                           && root.player.trackArtUrl.startsWith("file://")
-                                    source: visible ? root.player.trackArtUrl : ""
+                                    source: root.player?.trackArtUrl ?? ""
+                                    visible: source.toString() !== "" && status !== Image.Error
                                     fillMode: Image.PreserveAspectCrop
                                     asynchronous: true
                                 }
 
                                 Text {
                                     anchors.centerIn: parent
-                                    visible: !(root.player?.trackArtUrl ?? "").startsWith("file://")
+                                    visible: artwork.source.toString() === "" || artwork.status === Image.Error
                                     text: "󰎈"
                                     color: Theme.accent
                                     font.family: Theme.font
@@ -385,7 +441,7 @@ PanelWindow {
 
                             Column {
                                 anchors.verticalCenter: parent.verticalCenter
-                                width: 250
+                                width: parent.width - 108
                                 spacing: 4
 
                                 Text {
@@ -397,6 +453,7 @@ PanelWindow {
                                     font.pixelSize: 14
                                     font.bold: true
                                 }
+
                                 Text {
                                     width: parent.width
                                     text: root.player?.trackArtist ?? ""
@@ -406,36 +463,39 @@ PanelWindow {
                                     font.pixelSize: 11
                                 }
 
-                                // Posición
-                                Rectangle {
+                                Text {
                                     width: parent.width
-                                    height: 5
-                                    radius: 3
-                                    color: Theme.alpha(Theme.text, 0.12)
+                                    visible: text !== ""
+                                    text: root.player?.trackAlbum ?? ""
+                                    elide: Text.ElideRight
+                                    color: Theme.textDim
+                                    font.family: Theme.font
+                                    font.pixelSize: 10
+                                }
 
-                                    Rectangle {
-                                        anchors.left: parent.left
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        width: root.player && root.player.length > 0
-                                            ? parent.width * Math.min(1, root.player.position / root.player.length)
-                                            : 0
-                                        height: parent.height
-                                        radius: 3
-                                        color: Theme.accent
-                                    }
+                                StyledSlider {
+                                    width: parent.width
+                                    visible: Media.canSeek
+                                    value: Media.length > 0 ? Media.position / Media.length : 0
+                                    fillColor: Theme.accent
+                                    onMoved: value => Media.seekTo(value * Media.length)
                                 }
 
                                 Row {
-                                    spacing: 6
+                                    width: parent.width
+                                    visible: Media.canSeek
 
                                     Text {
-                                        text: root.fmtTime(root.player?.position ?? 0)
+                                        text: root.fmtTime(Media.position)
                                         color: Theme.textDim
                                         font.family: Theme.fontMono
                                         font.pixelSize: 10
                                     }
+
+                                    Item { width: parent.width - 70; height: 1 }
+
                                     Text {
-                                        text: root.fmtTime(root.player?.length ?? 0)
+                                        text: root.fmtTime(Media.length)
                                         color: Theme.textDim
                                         font.family: Theme.fontMono
                                         font.pixelSize: 10
@@ -444,45 +504,53 @@ PanelWindow {
                             }
                         }
 
-                        // Controles
                         Row {
-                            visible: (root.player?.trackTitle ?? "") !== ""
-                            spacing: 18
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            visible: Media.hasMetadata
+                            spacing: 22
 
                             Text {
-                                text: "󰔮"
-                                color: root.player?.canGoPrevious ? Theme.text : Theme.textDim
+                                text: "󰒮"
+                                color: Media.canGoPrevious ? Theme.text : Theme.textDim
+                                opacity: Media.canGoPrevious ? 1 : 0.45
                                 font.family: Theme.font
                                 font.pixelSize: 18
 
                                 MouseArea {
                                     anchors.fill: parent
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: root.player?.previous()
+                                    enabled: Media.canGoPrevious
+                                    cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                    onClicked: Media.previous()
                                 }
                             }
+
                             Text {
-                                text: root.player?.isPlaying ? "󰐌" : "󰐊"
-                                color: Theme.accent
+                                text: root.player?.isPlaying ? "󰏤" : "󰐊"
+                                color: Media.canTogglePlaying ? Theme.accent : Theme.textDim
+                                opacity: Media.canTogglePlaying ? 1 : 0.45
                                 font.family: Theme.font
                                 font.pixelSize: 22
 
                                 MouseArea {
                                     anchors.fill: parent
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: root.player?.togglePlaying()
+                                    enabled: Media.canTogglePlaying
+                                    cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                    onClicked: Media.togglePlaying()
                                 }
                             }
+
                             Text {
-                                text: "󰔯"
-                                color: root.player?.canGoNext ? Theme.text : Theme.textDim
+                                text: "󰒭"
+                                color: Media.canGoNext ? Theme.text : Theme.textDim
+                                opacity: Media.canGoNext ? 1 : 0.45
                                 font.family: Theme.font
                                 font.pixelSize: 18
 
                                 MouseArea {
                                     anchors.fill: parent
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: root.player?.next()
+                                    enabled: Media.canGoNext
+                                    cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                    onClicked: Media.next()
                                 }
                             }
                         }

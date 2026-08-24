@@ -3,6 +3,7 @@ import QtTest
 import "../../Services/OverlayState.js" as OverlayState
 import "../../Services/LauncherLogic.js" as LauncherLogic
 import "../../Services/OperationState.js" as OperationState
+import "../../Services/MediaLogic.js" as MediaLogic
 
 // Tests deterministas del reducer de estado de overlays interactivos.
 // Se ejecutan con: QT_QPA_PLATFORM=offscreen qmltestrunner -input tests/overlay-state -import .
@@ -294,5 +295,137 @@ TestCase {
         let timeout = OperationState.startupTimeout(live.state, launch.token);
         compare(timeout.accepted, false);
         compare(OperationState.isBusy(timeout.state), true);
+    }
+
+    function mediaPlayer(id, playing, title, artist) {
+        return {
+            uniqueId: id,
+            dbusName: "org.mpris.MediaPlayer2." + id,
+            identity: id.toUpperCase(),
+            isPlaying: playing,
+            trackTitle: title ?? "",
+            trackArtist: artist ?? "",
+            trackAlbum: "",
+            trackAlbumArtist: ""
+        };
+    }
+
+    function test_media_selection_handles_zero_one_and_multiple_players() {
+        compare(MediaLogic.choosePlayer([], ""), null);
+
+        let only = mediaPlayer("solo", false, "", "");
+        compare(MediaLogic.choosePlayer([only], ""), only);
+
+        let fallback = mediaPlayer("alpha", false, "", "");
+        let metadata = mediaPlayer("beta", false, "Song", "Artist");
+        compare(MediaLogic.choosePlayer([fallback, metadata], ""), metadata);
+    }
+
+    function test_media_selection_prefers_playing_over_paused_metadata() {
+        let paused = mediaPlayer("alpha", false, "Paused song", "Artist");
+        let playing = mediaPlayer("zeta", true, "", "");
+        compare(MediaLogic.choosePlayer([paused, playing], ""), playing);
+    }
+
+    function test_media_explicit_selection_persists_then_falls_back_after_removal() {
+        let playing = mediaPlayer("alpha", true, "Song", "Artist");
+        let explicit = mediaPlayer("zeta", false, "", "");
+        compare(MediaLogic.choosePlayer([playing, explicit], "zeta"), explicit);
+        compare(MediaLogic.choosePlayer([playing], "zeta"), playing);
+    }
+
+    function test_media_player_cycle_is_stable_and_wraps() {
+        let alpha = mediaPlayer("alpha", false, "", "");
+        let beta = mediaPlayer("beta", false, "", "");
+        let zeta = mediaPlayer("zeta", false, "", "");
+        let unordered = [zeta, alpha, beta];
+
+        compare(MediaLogic.cyclePlayerId(unordered, "alpha", 1), "beta");
+        compare(MediaLogic.cyclePlayerId(unordered, "zeta", 1), "alpha");
+        compare(MediaLogic.cyclePlayerId(unordered, "alpha", -1), "zeta");
+        compare(MediaLogic.cyclePlayerId([], "alpha", 1), "");
+    }
+
+    function test_media_selection_ties_use_stable_id_order() {
+        let zeta = mediaPlayer("zeta", false, "Song", "Artist");
+        let alpha = mediaPlayer("alpha", false, "Song", "Artist");
+        compare(MediaLogic.choosePlayer([zeta, alpha], ""), alpha);
+    }
+
+    function seekableMediaPlayer(length) {
+        return {
+            canControl: true,
+            canSeek: true,
+            positionSupported: true,
+            lengthSupported: true,
+            length: length
+        };
+    }
+
+    function test_media_timeline_rejects_nan() {
+        compare(MediaLogic.finiteTimelineValue(NaN), 0);
+    }
+
+    function test_media_timeline_rejects_positive_infinity() {
+        compare(MediaLogic.finiteTimelineValue(Infinity), 0);
+    }
+
+    function test_media_timeline_rejects_negative_infinity() {
+        compare(MediaLogic.finiteTimelineValue(-Infinity), 0);
+    }
+
+    function test_media_timeline_rejects_negative_values() {
+        compare(MediaLogic.finiteTimelineValue(-1), 0);
+    }
+
+    function test_media_timeline_preserves_finite_nonnegative_values() {
+        compare(MediaLogic.finiteTimelineValue(0), 0);
+        compare(MediaLogic.finiteTimelineValue(42.5), 42.5);
+    }
+
+    function test_media_can_seek_rejects_nonfinite_length() {
+        compare(MediaLogic.canSeek(seekableMediaPlayer(NaN)), false);
+        compare(MediaLogic.canSeek(seekableMediaPlayer(Infinity)), false);
+        compare(MediaLogic.canSeek(seekableMediaPlayer(-Infinity)), false);
+    }
+
+    function test_media_can_seek_requires_positive_length_and_capabilities() {
+        compare(MediaLogic.canSeek(seekableMediaPlayer(0)), false);
+        compare(MediaLogic.canSeek(seekableMediaPlayer(-1)), false);
+
+        let unsupported = seekableMediaPlayer(120);
+        unsupported.positionSupported = false;
+        compare(MediaLogic.canSeek(unsupported), false);
+
+        let uncontrollable = seekableMediaPlayer(120);
+        uncontrollable.canControl = false;
+        compare(MediaLogic.canSeek(uncontrollable), false);
+        compare(MediaLogic.canSeek(seekableMediaPlayer(120)), true);
+    }
+
+    function test_media_seek_rejects_nan_and_infinity() {
+        compare(MediaLogic.clampedSeekPosition(NaN, 120), null);
+        compare(MediaLogic.clampedSeekPosition(Infinity, 120), null);
+        compare(MediaLogic.clampedSeekPosition(-Infinity, 120), null);
+    }
+
+    function test_media_seek_rejects_nonfinite_or_nonpositive_length() {
+        compare(MediaLogic.clampedSeekPosition(30, NaN), null);
+        compare(MediaLogic.clampedSeekPosition(30, Infinity), null);
+        compare(MediaLogic.clampedSeekPosition(30, -Infinity), null);
+        compare(MediaLogic.clampedSeekPosition(30, 0), null);
+        compare(MediaLogic.clampedSeekPosition(30, -1), null);
+    }
+
+    function test_media_seek_clamps_negative_input() {
+        compare(MediaLogic.clampedSeekPosition(-1, 120), 0);
+    }
+
+    function test_media_seek_clamps_over_length_input() {
+        compare(MediaLogic.clampedSeekPosition(121, 120), 120);
+    }
+
+    function test_media_seek_preserves_valid_finite_input() {
+        compare(MediaLogic.clampedSeekPosition(42.5, 120), 42.5);
     }
 }
