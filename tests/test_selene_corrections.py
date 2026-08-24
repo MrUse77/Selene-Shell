@@ -22,6 +22,9 @@ SHELL_QML = PROJECT_ROOT / "shell.qml"
 LAUNCHER_QML = PROJECT_ROOT / "Modules" / "Launcher" / "Launcher.qml"
 DASHBOARD_QML = PROJECT_ROOT / "Modules" / "Dashboard" / "Dashboard.qml"
 POWER_MENU_QML = PROJECT_ROOT / "Modules" / "PowerMenu" / "PowerMenu.qml"
+LAUNCHER_LOGIC_JS = PROJECT_ROOT / "Services" / "LauncherLogic.js"
+OPERATION_STATE_JS = PROJECT_ROOT / "Services" / "OperationState.js"
+README = PROJECT_ROOT / "README.md"
 
 
 class SeleneCorrectionContracts(unittest.TestCase):
@@ -171,7 +174,7 @@ class SeleneCorrectionContracts(unittest.TestCase):
         source = LAUNCHER_QML.read_text(encoding="utf-8")
         self.assertRegex(
             source,
-            r"source\s*:\s*Quickshell\.iconPath\(\s*modelData\.icon\s*\?\?\s*\"\"\s*,\s*"
+            r"source\s*:\s*Quickshell\.iconPath\(\s*(?:resultDelegate\.)?modelData\.icon\s*\?\?\s*\"\"\s*,\s*"
             r"\"application-x-executable\"\s*\)",
             "Desktop entry icon names must be resolved with an executable icon fallback",
         )
@@ -223,6 +226,179 @@ class SeleneCorrectionContracts(unittest.TestCase):
         self.assertRegex(source, r"border\.width:\s*resultDelegate\.index\s*===\s*root\.selected\b")
         self.assertRegex(source, r"onPositionChanged:\s*root\.selected\s*=\s*resultDelegate\.index\b")
         self.assertRegex(source, r"onClicked:\s*\{\s*root\.selected\s*=\s*resultDelegate\.index\s*;")
+
+    def test_launcher_exposes_migrated_modes_and_safe_processes(self) -> None:
+        source = LAUNCHER_QML.read_text(encoding="utf-8")
+        for mode in ("apps", "windows", "run", "themes"):
+            self.assertIn(f'key: "{mode}"', source)
+        self.assertIn("LauncherLogic.parseCommand", source)
+        self.assertIn("Hyprland.toplevels.values", source)
+        self.assertIn('Hyprland.dispatch("focuswindow address:"', source)
+        self.assertIn('[themeSelector, "--list"]', source)
+        self.assertIn('[themeSelector, "--apply", item.themeId]', source)
+        self.assertIn("Theme.reloadTheme()", source)
+        self.assertIn('["wl-copy", calcResult]', source)
+
+    def test_launcher_mode_button_text_is_explicitly_vertically_centered(self) -> None:
+        source = LAUNCHER_QML.read_text(encoding="utf-8")
+        mode_delegate = source[
+            source.index("delegate: Capsule {") : source.index("HoverHandler { id: hover")
+        ]
+        content_start = mode_delegate.index("Row {")
+        mode_content = mode_delegate[content_start:]
+
+        self.assertRegex(mode_content, r"height\s*:\s*parent\.height\b")
+        text_nodes = re.findall(r"Text\s*\{([^{}]*)\}", mode_content)
+        self.assertEqual(len(text_nodes), 2, "The mode button must contain its icon and label Text nodes")
+        for text_node in text_nodes:
+            self.assertRegex(text_node, r"height\s*:\s*parent\.height\b")
+            self.assertRegex(
+                text_node,
+                r"verticalAlignment\s*:\s*Text\.AlignVCenter\b",
+            )
+
+    def test_shell_ipc_has_canonical_migration_entry_points(self) -> None:
+        source = SHELL_QML.read_text(encoding="utf-8")
+        for method, mode in (
+            ("openApps", "apps"),
+            ("openWindows", "windows"),
+            ("openRun", "run"),
+            ("openThemes", "themes"),
+        ):
+            self.assertRegex(
+                source,
+                rf"function\s+{method}\s*\(\)\s*\{{[^}}]*openLauncher\(\"{mode}\"",
+            )
+
+    def test_power_menu_confirms_only_destructive_actions(self) -> None:
+        source = POWER_MENU_QML.read_text(encoding="utf-8")
+        self.assertIn('confirm: false, cmd: ["hyprlock"]', source)
+        self.assertIn('confirm: false, cmd: ["systemctl", "suspend"]', source)
+        for command in (
+            '["hyprctl", "dispatch", "exit"]',
+            '["systemctl", "reboot"]',
+            '["systemctl", "poweroff"]',
+        ):
+            self.assertRegex(source, rf"confirm:\s*true,\s*cmd:\s*{re.escape(command)}")
+        self.assertIn("onExited:", source)
+        self.assertIn("stderr", source)
+
+    def test_process_acceptance_has_busy_guards_identity_and_startup_watchdogs(self) -> None:
+        launcher = LAUNCHER_QML.read_text(encoding="utf-8")
+        power = POWER_MENU_QML.read_text(encoding="utf-8")
+        for source in (launcher, power):
+            self.assertIn("OperationState.begin", source)
+            self.assertIn("OperationState.startupTimeout", source)
+            self.assertRegex(source, r"if\s*\([^)]*(?:Busy|busy)[^)]*\)\s*return")
+            self.assertRegex(source, re.compile(r"Timer\s*\{[^}]*startup", re.DOTALL | re.IGNORECASE))
+            self.assertRegex(source, r"(?:===|!==)\s*process", "Completions must verify process identity")
+        self.assertIn("closeOnStarted", power, "hyprlock needs successful-start close semantics")
+        self.assertRegex(power, r"enabled:\s*!root\.operationBusy")
+        self.assertRegex(launcher, r"enabled:\s*!root\.acceptanceBusy")
+
+    def test_overlay_sessions_guard_async_closures(self) -> None:
+        coordinator = OVERLAY_COORDINATOR_QML.read_text(encoding="utf-8")
+        launcher = LAUNCHER_QML.read_text(encoding="utf-8")
+        power = POWER_MENU_QML.read_text(encoding="utf-8")
+        self.assertRegex(coordinator, r"readonly\s+property\s+int\s+sessionGeneration\b")
+        self.assertRegex(coordinator, r"function\s+closeSession\s*\(")
+        self.assertIn("OverlayState.matchesSession", coordinator)
+        self.assertIn("function setLauncherMode", coordinator)
+        self.assertIn("OverlayCoordinator.setLauncherMode", launcher)
+        self.assertIn("OverlayCoordinator.closeSession", launcher)
+        self.assertIn("OverlayCoordinator.closeSession", power)
+        for source in (launcher, power):
+            for name in ("sessionKind", "sessionScreen", "sessionGeneration"):
+                self.assertRegex(source, rf"required\s+property\s+\w+\s+{name}\b")
+
+    def test_process_startup_success_comes_only_from_on_started(self) -> None:
+        launcher = LAUNCHER_QML.read_text(encoding="utf-8")
+        power = POWER_MENU_QML.read_text(encoding="utf-8")
+        for source, callbacks in (
+            (launcher, ("commandStarted", "themeListStarted", "themeApplyStarted")),
+            (power, ("actionStarted",)),
+        ):
+            for callback in callbacks:
+                calls = re.findall(rf"\b{callback}\s*\(", source)
+                self.assertEqual(
+                    len(calls), 2,
+                    f"{callback} must be declared once and called only by Process.onStarted",
+                )
+            self.assertNotRegex(
+                source,
+                re.compile(r"onTriggered\s*:\s*\{.*?\.running.*?Started\s*\(", re.DOTALL),
+                "Process.running is allocated before QProcess::started and cannot prove startup",
+            )
+
+    def test_started_long_lived_processes_are_retained_without_release_timers(self) -> None:
+        launcher = LAUNCHER_QML.read_text(encoding="utf-8")
+        power = POWER_MENU_QML.read_text(encoding="utf-8")
+        self.assertNotIn("commandReleaseWatchdog", launcher)
+        self.assertNotIn("actionReleaseWatchdog", power)
+        self.assertNotRegex(launcher, r"interval\s*:\s*250\b")
+        self.assertNotRegex(power, r"interval\s*:\s*250\b")
+        self.assertRegex(launcher, r"function\s+commandStarted\b[\s\S]*?commandProcess\s*=\s*null")
+        self.assertRegex(power, r"function\s+actionStarted\b[\s\S]*?actionProcess\s*=\s*null")
+        self.assertIn('["notify-send"', launcher)
+        self.assertIn('["notify-send"', power)
+
+    def test_theme_load_invalidation_cancels_wrapper_before_releasing_ownership(self) -> None:
+        source = LAUNCHER_QML.read_text(encoding="utf-8")
+        start = source.index("function invalidateThemeLoad()")
+        end = source.index("function loadThemes()", start)
+        text = source[start:end]
+        stop = text.index("themeListStartupWatchdog.stop()")
+        cancel = text.index("process.running = false")
+        destroy = text.index("process.destroy()")
+        release = text.index("themeListProcess = null")
+        self.assertLess(stop, cancel)
+        self.assertLess(cancel, destroy)
+        self.assertLess(destroy, release)
+
+    def test_launcher_reacts_to_same_open_mode_switch(self) -> None:
+        source = LAUNCHER_QML.read_text(encoding="utf-8")
+        self.assertRegex(
+            source,
+            re.compile(
+                r"Connections\s*\{\s*target:\s*OverlayCoordinator.*?"
+                r"onLauncherModeChanged\s*\([^)]*\)\s*\{[^}]*"
+                r"if\s*\(root\.visible\)[^}]*root\.setMode\(",
+                re.DOTALL,
+            ),
+            "A launcher already visible must consume same-kind IPC mode changes",
+        )
+
+    def test_theme_loading_clears_stale_results_and_blocks_acceptance(self) -> None:
+        source = LAUNCHER_QML.read_text(encoding="utf-8")
+        self.assertRegex(source, r"property\s+bool\s+themesLoading\b")
+        load_body = re.search(r"function\s+loadThemes\s*\([^)]*\)\s*\{(.*?)\n\s*\}", source, re.DOTALL)
+        self.assertIsNotNone(load_body)
+        self.assertRegex(load_body.group(1), r"themes\s*=\s*\[\]")
+        self.assertRegex(load_body.group(1), r"results\s*=\s*\[\]")
+        self.assertRegex(load_body.group(1), r"themesLoading\s*=\s*true")
+        self.assertRegex(source, r"if\s*\(themesLoading\)\s*return")
+        self.assertIn("themeLoadGeneration", source)
+        self.assertRegex(source, r"if\s*\([^)]*themeLoadGeneration[^)]*\)\s*return")
+
+    def test_readme_documents_cutover_and_rollback(self) -> None:
+        source = README.read_text(encoding="utf-8")
+        for shortcut in ("SUPER+M", "SUPER+Tab", "SUPER+R", "SUPER+SHIFT+X", "SUPER+SHIFT+T"):
+            self.assertIn(shortcut, source)
+        self.assertIn("Rollback", source)
+        self.assertIn("ipc call selene openApps", source)
+        self.assertNotIn("ipc toggleLauncher", source)
+
+    def test_launcher_logic_is_a_pure_registered_service_helper(self) -> None:
+        self.assertTrue(LAUNCHER_LOGIC_JS.exists())
+        source = LAUNCHER_LOGIC_JS.read_text(encoding="utf-8")
+        for function in ("normalizeMode", "cycleMode", "parseCommand", "rankItems"):
+            self.assertRegex(source, rf"function\s+{function}\s*\(")
+
+    def test_operation_state_is_a_pure_helper(self) -> None:
+        self.assertTrue(OPERATION_STATE_JS.exists())
+        source = OPERATION_STATE_JS.read_text(encoding="utf-8")
+        for function in ("idle", "begin", "started", "finish", "startupTimeout", "isBusy"):
+            self.assertRegex(source, rf"function\s+{function}\s*\(")
 
 
 if __name__ == "__main__":

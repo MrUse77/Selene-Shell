@@ -1,6 +1,8 @@
 import QtQuick
 import QtTest
 import "../../Services/OverlayState.js" as OverlayState
+import "../../Services/LauncherLogic.js" as LauncherLogic
+import "../../Services/OperationState.js" as OperationState
 
 // Tests deterministas del reducer de estado de overlays interactivos.
 // Se ejecutan con: QT_QPA_PLATFORM=offscreen qmltestrunner -input tests/overlay-state -import .
@@ -161,5 +163,136 @@ TestCase {
             { type: "open", kind: "calendar", origin: { source: "widget", screen: screenA, explicit: true } },
             [screenA], {});
         verifyState(r, "", null, false);
+    }
+
+    function test_launcher_mode_normalization_and_cycle() {
+        compare(LauncherLogic.normalizeMode("windows"), "windows");
+        compare(LauncherLogic.normalizeMode("unknown"), "apps");
+        compare(LauncherLogic.cycleMode("apps", 1), "windows");
+        compare(LauncherLogic.cycleMode("apps", -1), "themes");
+        compare(LauncherLogic.cycleMode("themes", 1), "apps");
+    }
+
+    function test_command_parser_preserves_argument_boundaries() {
+        let simple = LauncherLogic.parseCommand("notify-send hello");
+        compare(simple.ok, true);
+        compare(simple.args.length, 2);
+        compare(simple.args[0], "notify-send");
+        compare(simple.args[1], "hello");
+
+        let quoted = LauncherLogic.parseCommand("printf '%s %s' one \"two words\"");
+        compare(quoted.ok, true);
+        compare(quoted.args.length, 4);
+        compare(quoted.args[1], "%s %s");
+        compare(quoted.args[3], "two words");
+
+        let escaped = LauncherLogic.parseCommand("touch path\\ with\\ spaces");
+        compare(escaped.ok, true);
+        compare(escaped.args[1], "path with spaces");
+    }
+
+    function test_command_parser_rejects_invalid_or_empty_input() {
+        let empty = LauncherLogic.parseCommand("   ");
+        compare(empty.ok, false);
+        verify(empty.error.length > 0);
+
+        let quote = LauncherLogic.parseCommand("printf 'unterminated");
+        compare(quote.ok, false);
+        verify(quote.error.length > 0);
+
+        let escape = LauncherLogic.parseCommand("printf trailing\\");
+        compare(escape.ok, false);
+        verify(escape.error.length > 0);
+    }
+
+    function test_fuzzy_ranking_matches_and_orders_items() {
+        let items = [
+            { title: "Firefox", subtitle: "Web Browser" },
+            { title: "Files", subtitle: "File Manager" },
+            { title: "Terminal", subtitle: "Console" }
+        ];
+        let ranked = LauncherLogic.rankItems("fx", items);
+        compare(ranked.length, 1);
+        compare(ranked[0].title, "Firefox");
+
+        let all = LauncherLogic.rankItems("", items);
+        compare(all.length, 3);
+
+        let none = LauncherLogic.rankItems("zzz", items);
+        compare(none.length, 0);
+    }
+
+    function test_overlay_session_generation_advances_only_for_meaningful_transitions() {
+        let closed = OverlayState.makeState("", null, 7);
+        let opened = OverlayState.reduce(closed,
+            { type: "open", kind: "launcher", origin: { source: "widget", screen: screenA, explicit: true } },
+            [screenA, screenB], {});
+        compare(opened.state.generation, 8);
+
+        let sameOpen = OverlayState.reduce(opened.state,
+            { type: "open", kind: "launcher", origin: { source: "ipc", screen: screenB, explicit: true } },
+            [screenA, screenB], {});
+        compare(sameOpen.state.generation, 8);
+
+        let wrongClose = OverlayState.reduce(sameOpen.state,
+            { type: "close", kind: "power" }, [screenA, screenB], {});
+        compare(wrongClose.state.generation, 8);
+
+        let switched = OverlayState.reduce(wrongClose.state,
+            { type: "open", kind: "power", origin: { source: "widget", screen: screenB, explicit: true } },
+            [screenA, screenB], {});
+        compare(switched.state.generation, 9);
+
+        let modeChanged = OverlayState.bumpGeneration(switched.state);
+        compare(modeChanged.generation, 10);
+        compare(modeChanged.activeKind, "power");
+        compare(modeChanged.targetScreen, screenB);
+    }
+
+    function test_overlay_session_match_rejects_old_kind_screen_or_generation() {
+        let state = OverlayState.makeState("launcher", screenA, 12);
+        compare(OverlayState.matchesSession(state, "launcher", screenA, 12), true);
+        compare(OverlayState.matchesSession(state, "power", screenA, 12), false);
+        compare(OverlayState.matchesSession(state, "launcher", screenB, 12), false);
+        compare(OverlayState.matchesSession(state, "launcher", screenA, 11), false);
+    }
+
+    function test_operation_state_rejects_reentrant_begin_and_stale_finish() {
+        let first = OperationState.begin(OperationState.idle());
+        compare(first.accepted, true);
+        compare(OperationState.isBusy(first.state), true);
+
+        let repeated = OperationState.begin(first.state);
+        compare(repeated.accepted, false);
+        compare(repeated.token, first.token);
+
+        let stale = OperationState.finish(first.state, first.token + 1);
+        compare(stale.accepted, false);
+        compare(OperationState.isBusy(stale.state), true);
+
+        let completed = OperationState.finish(stale.state, first.token);
+        compare(completed.accepted, true);
+        compare(OperationState.isBusy(completed.state), false);
+    }
+
+    function test_operation_state_failed_start_timeout_resets_busy_state() {
+        let launch = OperationState.begin(OperationState.idle());
+        let timeout = OperationState.startupTimeout(launch.state, launch.token);
+        compare(timeout.accepted, true);
+        compare(OperationState.isBusy(timeout.state), false);
+
+        let next = OperationState.begin(timeout.state);
+        compare(next.accepted, true);
+        verify(next.token > launch.token);
+    }
+
+    function test_operation_state_liveness_prevents_false_startup_timeout() {
+        let launch = OperationState.begin(OperationState.idle());
+        let live = OperationState.started(launch.state, launch.token);
+        compare(live.accepted, true);
+
+        let timeout = OperationState.startupTimeout(live.state, launch.token);
+        compare(timeout.accepted, false);
+        compare(OperationState.isBusy(timeout.state), true);
     }
 }

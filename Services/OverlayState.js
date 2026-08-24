@@ -5,11 +5,33 @@
 
 const VALID_KINDS = ["launcher", "dashboard", "power"];
 
-function makeState(activeKind, targetScreen) {
+function makeState(activeKind, targetScreen, generation) {
     return {
         activeKind: activeKind || "",
-        targetScreen: targetScreen || null
+        targetScreen: targetScreen || null,
+        generation: generation || 0
     };
+}
+
+function bumpGeneration(state) {
+    state = state || makeState();
+    return makeState(state.activeKind, state.targetScreen, (state.generation || 0) + 1);
+}
+
+function matchesSession(state, kind, screen, generation) {
+    state = state || makeState();
+    return state.activeKind === kind
+        && state.targetScreen === screen
+        && (state.generation || 0) === generation;
+}
+
+function transitionState(state, activeKind, targetScreen) {
+    const nextKind = activeKind || "";
+    const nextScreen = targetScreen || null;
+    if (state.activeKind === nextKind && state.targetScreen === nextScreen) {
+        return makeState(nextKind, nextScreen, state.generation);
+    }
+    return makeState(nextKind, nextScreen, state.generation + 1);
 }
 
 function isValidKind(kind) {
@@ -26,10 +48,11 @@ function isScreenValid(screen, liveScreens) {
 }
 
 function normalizeState(state, liveScreens) {
+    state = makeState(state.activeKind, state.targetScreen, state.generation);
     if (state.activeKind !== "" && !isScreenValid(state.targetScreen, liveScreens)) {
-        return makeState();
+        return transitionState(state, "", null);
     }
-    return makeState(state.activeKind, state.targetScreen);
+    return state;
 }
 
 function canOpenOnScreen(origin, fullscreenByScreen) {
@@ -65,21 +88,23 @@ function reduce(state, action, liveScreens, fullscreenByScreen) {
         if (!isScreenValid(action.origin?.screen, liveScreens)) return { state: state, accepted: false };
         if (!canOpenOnScreen(action.origin, fullscreenByScreen)) return { state: state, accepted: false };
         if (state.activeKind === kind) return { state: state, accepted: true };
-        return { state: makeState(kind, action.origin.screen), accepted: true };
+        return { state: transitionState(state, kind, action.origin.screen), accepted: true };
 
     case "toggle":
         if (!isValidKind(kind)) return { state: state, accepted: false };
-        if (state.activeKind === kind) return { state: makeState(), accepted: true };
+        if (state.activeKind === kind) return { state: transitionState(state, "", null), accepted: true };
         if (!isScreenValid(action.origin?.screen, liveScreens)) return { state: state, accepted: false };
         if (!canOpenOnScreen(action.origin, fullscreenByScreen)) return { state: state, accepted: false };
-        return { state: makeState(kind, action.origin.screen), accepted: true };
+        return { state: transitionState(state, kind, action.origin.screen), accepted: true };
 
     case "close":
         if (kind !== "" && state.activeKind !== kind) return { state: state, accepted: true };
-        return { state: makeState(), accepted: true };
+        return { state: transitionState(state, "", null), accepted: true };
 
     case "closeForScreen":
-        if (state.targetScreen === action.screen) return { state: makeState(), accepted: true };
+        if (state.targetScreen === action.screen) {
+            return { state: transitionState(state, "", null), accepted: true };
+        }
         return { state: state, accepted: true };
 
     default:

@@ -15,9 +15,13 @@ Item {
     // este singleton los asignan. Los consumidores deben usar open/toggle/close.
     property string _activeKind: ""
     property var _targetScreen: null
+    property string _launcherMode: "apps"
+    property int _sessionGeneration: 0
 
     readonly property string activeKind: _activeKind
     readonly property var targetScreen: _targetScreen
+    readonly property string launcherMode: _launcherMode
+    readonly property int sessionGeneration: _sessionGeneration
     readonly property bool isOpen: _activeKind !== ""
     readonly property bool launcherOpen: _activeKind === "launcher"
     readonly property bool dashboardOpen: _activeKind === "dashboard"
@@ -28,15 +32,53 @@ Item {
     Connections {
         target: Quickshell
         function onScreensChanged() {
-            if (_targetScreen !== null && !root.isScreenValid(_targetScreen)) {
-                root.closeForScreen(_targetScreen);
+            if (root._targetScreen !== null && !root.isScreenValid(root._targetScreen)) {
+                root.closeForScreen(root._targetScreen);
             }
         }
     }
 
+    function setLauncherMode(mode) {
+        const nextMode = ["apps", "windows", "run", "themes"].includes(mode) ? mode : "apps";
+        if (_launcherMode === nextMode) return false;
+        _sessionGeneration = OverlayState.bumpGeneration(currentState()).generation;
+        _launcherMode = nextMode;
+        return true;
+    }
+
+    function openLauncher(mode, origin) {
+        setLauncherMode(mode);
+        return open("launcher", origin);
+    }
+
+    function currentState() {
+        return {
+            activeKind: _activeKind,
+            targetScreen: _targetScreen,
+            generation: _sessionGeneration
+        };
+    }
+
+    function captureSession(kind, screen) {
+        return {
+            kind: kind,
+            screen: screen,
+            generation: _sessionGeneration
+        };
+    }
+
+    function sessionMatches(kind, screen, generation) {
+        return OverlayState.matchesSession(currentState(), kind, screen, generation);
+    }
+
+    function closeSession(kind, screen, generation) {
+        if (!sessionMatches(kind, screen, generation)) return false;
+        return close(kind);
+    }
+
     function open(kind, origin) {
         const result = OverlayState.reduce(
-            { activeKind: _activeKind, targetScreen: _targetScreen },
+            currentState(),
             { type: "open", kind: kind, origin: origin },
             Quickshell.screens,
             fullscreenByScreen()
@@ -47,7 +89,7 @@ Item {
 
     function toggle(kind, origin) {
         const result = OverlayState.reduce(
-            { activeKind: _activeKind, targetScreen: _targetScreen },
+            currentState(),
             { type: "toggle", kind: kind, origin: origin },
             Quickshell.screens,
             fullscreenByScreen()
@@ -58,7 +100,7 @@ Item {
 
     function close(kind) {
         const result = OverlayState.reduce(
-            { activeKind: _activeKind, targetScreen: _targetScreen },
+            currentState(),
             { type: "close", kind: kind || "" },
             Quickshell.screens,
             {}
@@ -69,7 +111,7 @@ Item {
 
     function closeForScreen(screen) {
         const result = OverlayState.reduce(
-            { activeKind: _activeKind, targetScreen: _targetScreen },
+            currentState(),
             { type: "closeForScreen", kind: "", screen: screen },
             Quickshell.screens,
             {}
@@ -92,12 +134,15 @@ Item {
     function apply(result) {
         const nextKind = result.state.activeKind;
         const nextScreen = result.state.targetScreen;
+        const nextGeneration = result.state.generation;
         if (nextKind === "") {
             _activeKind = "";
             _targetScreen = null;
+            _sessionGeneration = nextGeneration;
         } else {
             _activeKind = "";
             _targetScreen = nextScreen;
+            _sessionGeneration = nextGeneration;
             _activeKind = nextKind;
         }
     }
