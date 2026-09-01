@@ -48,9 +48,16 @@ PanelWindow {
         }
     }
 
-    Keys.onLeftPressed: navBack()
-    Keys.onRightPressed: navForward()
-    Keys.onEscapePressed: ShellState.calendarOpen = false
+    // Keys solo se adjunta a Items; en la raíz (PanelWindow) el attach
+    // falla con WARN y la navegación queda muerta. Vive acá, enfocado.
+    Item {
+        anchors.fill: parent
+        focus: true
+
+        Keys.onLeftPressed: navBack()
+        Keys.onRightPressed: navForward()
+        Keys.onEscapePressed: ShellState.calendarOpen = false
+    }
 
     HyprlandFocusGrab {
         active: root.visible
