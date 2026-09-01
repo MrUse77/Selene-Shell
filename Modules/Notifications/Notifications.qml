@@ -107,15 +107,16 @@ PanelWindow {
                 height: contentCol.implicitHeight + 24
                 border.color: Theme.alpha(root.urgencyColor(n), critical ? 0.6 : 0.3)
 
-                // Expiración (las críticas no se auto-cierran)
+                // Expiración (las críticas no se auto-cierran).
+                // Solo expire(): close() emite closed() de forma síncrona y
+                // Connections.onClosed deshace el uid con el delegate vivo.
+                // Remover acá tras expire() resolvía ids (root) sobre un
+                // contexto ya destruido -> ReferenceError repetido en el log.
                 Timer {
                     interval: popup.n.expireTimeout > 0 ? popup.n.expireTimeout : 5000
                     running: !popup.critical
                     repeat: false
-                    onTriggered: {
-                        popup.n.expire();
-                        root.removeUid(popup.uid);
-                    }
+                    onTriggered: popup.n.expire()
                 }
 
                 Connections {
