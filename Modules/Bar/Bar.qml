@@ -119,6 +119,7 @@ PanelWindow {
                 UpdatesWidget {}
                 AudioWidget {}
                 HardwareWidget {}
+                BatteryWidget {}
 
                 Divider {}
 

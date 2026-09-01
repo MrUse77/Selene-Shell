@@ -323,6 +323,118 @@ PanelWindow {
                     }
                 }
 
+                // ---- Battery ----
+                Card {
+                    id: batteryCard
+
+                    readonly property color bandColor:
+                        Battery.band === "cyan" ? Theme.cyan
+                        : Battery.band === "success" ? Theme.success
+                        : Battery.band === "urgent" ? Theme.urgent
+                        : Battery.band === "warning" ? Theme.warning
+                        : Battery.band === "accent" ? Theme.accent
+                        : Theme.textDim
+
+                    width: parent.width
+                    visible: Battery.available
+                    height: Battery.available ? 126 : 0
+
+                    Column {
+                        anchors.fill: parent
+                        anchors.margins: 14
+                        spacing: 8
+
+                        Row {
+                            width: parent.width
+                            height: 34
+                            spacing: 10
+
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: Battery.icon
+                                color: batteryCard.bandColor
+                                font.family: Theme.font
+                                font.pixelSize: 24
+                            }
+
+                            Column {
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: parent.width - 104
+                                spacing: 1
+
+                                Text {
+                                    text: "Battery"
+                                    color: Theme.text
+                                    font.family: Theme.font
+                                    font.pixelSize: 13
+                                    font.bold: true
+                                }
+
+                                Text {
+                                    text: Battery.status
+                                    color: batteryCard.bandColor
+                                    font.family: Theme.font
+                                    font.pixelSize: 11
+                                }
+                            }
+
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: Battery.hasPercentage ? Battery.roundedPercent + "%" : "—"
+                                color: Battery.hasPercentage ? Theme.text : Theme.textDim
+                                font.family: Theme.fontMono
+                                font.pixelSize: 20
+                                font.bold: true
+                            }
+                        }
+
+                        Row {
+                            width: parent.width
+                            height: 16
+                            spacing: 12
+
+                            Text {
+                                text: Battery.onAc ? "AC power" : "Battery power"
+                                color: Theme.textDim
+                                font.family: Theme.font
+                                font.pixelSize: 11
+                            }
+
+                            Text {
+                                visible: Battery.remainingText !== ""
+                                text: Battery.remainingText + (Battery.charging ? " to full" : " remaining")
+                                color: Theme.textDim
+                                font.family: Theme.font
+                                font.pixelSize: 11
+                            }
+
+                            Text {
+                                visible: Battery.batteryCount > 1
+                                text: Battery.batteryCount + " batteries"
+                                color: Theme.textDim
+                                font.family: Theme.font
+                                font.pixelSize: 11
+                            }
+                        }
+
+                        Rectangle {
+                            width: parent.width
+                            visible: Battery.hasPercentage
+                            height: Battery.hasPercentage ? 8 : 0
+                            radius: 4
+                            color: Theme.alpha(Theme.text, 0.1)
+                            clip: true
+
+                            Rectangle {
+                                height: parent.height
+                                width: Battery.hasPercentage ? parent.width * Battery.ratio : 0
+                                radius: parent.radius
+                                color: batteryCard.bandColor
+                            }
+                        }
+                    }
+                }
+
                 // ---- Medios ----
                 Card {
                     width: parent.width

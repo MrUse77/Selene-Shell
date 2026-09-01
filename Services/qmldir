@@ -2,6 +2,7 @@ singleton Anim Anim.qml
 singleton Theme Theme.qml
 singleton Moon Moon.qml
 singleton Hardware Hardware.qml
+singleton Battery Battery.qml
 singleton Audio Audio.qml
 singleton Media Media.qml
 singleton Updates Updates.qml

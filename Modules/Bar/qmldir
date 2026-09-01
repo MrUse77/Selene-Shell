@@ -7,6 +7,7 @@ WindowTitle WindowTitle.qml
 ClockWidget ClockWidget.qml
 AudioWidget AudioWidget.qml
 HardwareWidget HardwareWidget.qml
+BatteryWidget BatteryWidget.qml
 UpdatesWidget UpdatesWidget.qml
 Tray Tray.qml
 MediaWidget MediaWidget.qml
