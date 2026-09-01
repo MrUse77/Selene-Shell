@@ -26,12 +26,6 @@ BarWidget {
         anchors.centerIn: parent
         spacing: 9
 
-        MoonDisc {
-            anchors.verticalCenter: parent.verticalCenter
-            width: 18
-            height: 18
-        }
-
         Text {
             anchors.verticalCenter: parent.verticalCenter
             text: Qt.formatDateTime(clock.date, "HH:mm")

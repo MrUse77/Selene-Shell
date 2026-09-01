@@ -105,7 +105,7 @@ PanelWindow {
                 width: parent.width - 32
                 spacing: 12
 
-                // ---- Usuario + luna ----
+                // ---- Usuario ----
                 Card {
                     width: parent.width
                     height: 84
@@ -153,25 +153,6 @@ PanelWindow {
                             }
                         }
 
-                        Item { width: 8; height: 1 }
-
-                        Column {
-                            anchors.verticalCenter: parent.verticalCenter
-                            spacing: 4
-
-                            MoonDisc {
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                width: 30
-                                height: 30
-                            }
-                            Text {
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                text: Moon.name
-                                color: Theme.textDim
-                                font.family: Theme.font
-                                font.pixelSize: 10
-                            }
-                        }
                     }
                 }
 
