@@ -40,8 +40,10 @@ nuevas deben abrir el modo concreto.
 | `SUPER+SHIFT+T` | selector buscable de IDs que `moonarch/theme-selector --list` valida dinámicamente |
 
 El prefijo `=` activa la calculadora desde el launcher unificado; `Enter` copia
-el resultado mediante `wl-copy`. El click del lanzador y del botón de energía
-de Waybar apunta a los mismos IPC aunque Waybar quede como fallback dormido.
+el resultado mediante `wl-copy`. Selene es el único dueño del escritorio: barra,
+lanzador, notificaciones, OSD, menú de sesión y dashboard salen de este proceso,
+y el stack que cumplía esos roles antes —Waybar, Rofi, Eww y Dunst— ya no está
+en el repositorio de dotfiles.
 
 ## Theming MoonArch
 
@@ -54,15 +56,20 @@ recarga los tokens inmediatamente; el poll de archivos queda como respaldo.
 
 ## Rollback
 
-Los cinco archivos de `~/.config/rofi` se conservan byte por byte. Para volver:
+Waybar, Rofi, Eww y Dunst ya no están en el repositorio: su configuración se
+eliminó y el instalador dejó de ofrecer sus paquetes. Volver atrás es una
+operación de Git, no un cambio de binding:
 
-1. quitá `qs -c selene` del autostart de Hyprland y reactivá `waybar`/`dunst`;
-2. restaurá los binds de Hyprland a `~/.config/rofi/scripts/launch`,
-   `launch-powermenu` y al selector sin argumentos;
-3. restaurá los clicks del Waybar dormido a esos mismos scripts.
+1. `git revert` del squash que integró la migración en `MoonArch`, para recuperar
+   las cuatro configuraciones y las entradas del instalador;
+2. reinstalar los paquetes que necesites (`paru -S waybar rofi dunst`), porque el
+   instalador ya no los incluye;
+3. quitar `qs -c selene` del autostart de Hyprland y recargar la sesión.
 
-El selector sin argumentos sigue abriendo su UI Rofi, así que ese camino no
-depende de Selene. Eww permanece configurado y `SUPER+N` no cambia.
+El selector sin argumentos **delega en Selene** (`qs -c selene ipc call selene
+openThemes`): no abre una UI propia, y si Quickshell no está corriendo falla con
+un mensaje que nombra `--list` y `--apply`. Esos dos modos, más la forma
+posicional, siguen funcionando sin Selene.
 
 ## Estructura
 
