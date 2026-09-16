@@ -6,3 +6,4 @@ __pycache__/
 .atl/
 .codegraph/
 .zcode/plans/
+.pi/gentle-ai/sdd-preflight.json
