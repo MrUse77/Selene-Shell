@@ -4,13 +4,28 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 
-// Tema de Selene, derivado de moonarch en runtime.
+// Tema de Selene, derivado en runtime de la raíz de temas configurada.
 //
-// Fuentes (en orden de prioridad por token):
-//   1. ~/.local/share/moonarch/themes/current/waybar.css  (@define-color)
-//   2. ~/.local/share/moonarch/themes/current/ghostty.conf (palette 0-15,
-//      background, foreground, selection-*)
-//   3. Fallback Tokyo Night embebido (arranque garantizado).
+// Raíz de temas configurable (primer valor no vacío de la cadena gana):
+//   1. Variable de entorno neutra    SHELL_THEMES_ROOT
+//   2. Alias de compatibilidad       MOONARCH_THEMES_ROOT
+//   3. Setting themesRoot            del archivo de settings de la shell
+//                                    (<Quickshell.shellDir>/shell.json)
+//   4. Default                       $HOME/.local/share/moonarch/themes
+//
+// El default es moonarch (Selene es su shell), pero NO es un requisito:
+// cualquier raíz con la estructura <raíz>/current/{ghostty.conf, waybar.css,
+// quickshell.json opcional} funciona sin cambios de código. El valor crudo de
+// `themeCommand` de ese mismo settings vive acá como settingsThemeCommand; la
+// cadena completa del comando se resuelve en Launcher.qml (Launcher.themeSelector).
+//
+// Fuentes de la paleta (en orden de prioridad por token):
+//   1. <raíz>/current/quickshell.json   (fragmento dedicado, OPCIONAL;
+//      prioridad total sobre lo derivado)
+//   2. <raíz>/current/waybar.css        (@define-color)
+//   3. <raíz>/current/ghostty.conf      (palette 0-15, background, foreground,
+//      selection-*)
+//   4. Fallback Tokyo Night embebido (arranque garantizado).
 //
 // El symlink `current` se swapea atómicamente sin que cambie la ruta, así
 // que los watchers de archivo no se disparan: se re-lee periódicamente
@@ -18,8 +33,59 @@ import Quickshell.Io
 Item {
     id: root
 
-    readonly property string themesRoot:
-        (Quickshell.env("MOONARCH_THEMES_ROOT") ?? Quickshell.env("HOME") + "/.local/share/moonarch/themes")
+    // Devuelve el primer argumento definido y no vacío; el último es el default.
+    function pick() {
+        for (let i = 0; i < arguments.length - 1; i++) {
+            const value = arguments[i];
+            if (typeof value === "string" && value !== "") return value;
+        }
+        return arguments[arguments.length - 1];
+    }
+
+    // ---- Settings de la shell (shell.json en el directorio de config) ----
+    // Claves reconocidas: themesRoot y themeCommand. Un valor null o una clave
+    // ausente significa "usar el default"; un string no vacío lo configura.
+    property var _settings: null
+
+    readonly property string settingsThemesRoot:
+        (typeof _settings?.themesRoot === "string" ? _settings.themesRoot : "")
+
+    readonly property string settingsThemeCommand:
+        (typeof _settings?.themeCommand === "string" ? _settings.themeCommand : "")
+
+    readonly property string themesRoot: pick(
+        Quickshell.env("SHELL_THEMES_ROOT"),
+        Quickshell.env("MOONARCH_THEMES_ROOT"),
+        settingsThemesRoot,
+        Quickshell.env("HOME") + "/.local/share/moonarch/themes"
+    )
+
+    // Default del comando de temas (D1); la cadena completa vive en Launcher.qml.
+    readonly property string defaultThemeCommand:
+        Quickshell.env("HOME") + "/.local/bin/moonarch/theme-selector"
+
+    function _loadSettings(txt) {
+        if (!txt) {
+            _settings = null;
+            return;
+        }
+        try {
+            const parsed = JSON.parse(txt);
+            _settings = (parsed && typeof parsed === "object" && !Array.isArray(parsed)) ? parsed : null;
+        } catch (e) {
+            _settings = null;
+        }
+    }
+
+    FileView {
+        id: settingsView
+        path: `${Quickshell.shellDir}/shell.json`
+        watchChanges: true
+        printErrors: false
+        onLoaded: root._loadSettings(text())
+        onLoadFailed: root._loadSettings("")
+        Component.onCompleted: reload()
+    }
 
     // ---- Tokens derivados (hex strings; usar Theme.alpha() para alphas) ----
     readonly property string bg: _t.bg
@@ -104,9 +170,21 @@ Item {
             if (eq < 0) continue;
             const key = t.slice(0, eq).trim();
             const val = t.slice(eq + 1).trim();
+            // Forma legada: `palette 5 = #RRGGBB` (el indice esta en la clave).
+            // Se conserva porque un bundle no verificado podria usarla.
             const pm = key.match(/^palette\s+(\d+)$/);
-            if (pm) map["p" + Number(pm[1])] = val;
-            else map[key] = val;
+            if (pm) {
+                map["p" + Number(pm[1])] = val;
+            } else if (key === "palette") {
+                // Forma real de ghostty: `palette = 5=#F5C2E7`. El primer split
+                // en "=" deja key="palette" y val="5=#F5C2E7"; el indice y el
+                // color viven en el valor, no en la clave.
+                const pv = val.match(/^(\d+)\s*=\s*(.+)$/);
+                if (pv) map["p" + Number(pv[1])] = pv[2];
+                else map[key] = val;
+            } else {
+                map[key] = val;
+            }
         }
         return map;
     }
@@ -141,8 +219,8 @@ Item {
 
         // Hook de integración oficial moonarch: un fragmento dedicado por
         // bundle (quickshell.json con nombres de token idénticos) tiene
-        // prioridad total sobre la derivación. Todavía no existe en ningún
-        // bundle; onLoadFailed lo deja sin efecto.
+        // prioridad total sobre la derivación y sigue siendo opcional (D5).
+        // onLoadFailed lo deja sin efecto, sin ruido de log.
         if (_lastOverride) {
             for (const k in _lastOverride) {
                 if (k in _t) _t[k] = _lastOverride[k];
@@ -150,14 +228,26 @@ Item {
             console.log("[selene:theme] overrides de quickshell.json aplicados");
         }
 
-        console.log("[selene:theme] moonarch aplicado — bg", _t.bg, "accent", _t.accent);
+        console.log("[selene:theme] paleta aplicada — bg", _t.bg, "accent", _t.accent);
     }
 
     property var _lastOverride: null
 
+    // Agrupa las lecturas de los tres FileView: Qt.callLater coalesce las
+    // llamadas repetidas dentro del mismo ciclo del event loop, así que un
+    // cambio de bundle converge en una sola aplicación de paleta (tarea 3.2).
+    function _requestApply() {
+        Qt.callLater(_applyCached);
+    }
+
+    function _applyCached() {
+        applyTheme(_lastGhostty, _lastWaybar);
+    }
+
     function reloadTheme() {
         ghosttyView.reload();
         waybarView.reload();
+        overrideView.reload();
     }
 
     // ---- Lectura de fragmentos (poll: el swap del symlink no dispara watchers) ----
@@ -170,10 +260,10 @@ Item {
             const txt = text();
             if (txt !== root._lastGhostty) {
                 root._lastGhostty = txt;
-                root.applyTheme(txt, root._lastWaybar);
+                root._requestApply();
             }
         }
-        onLoadFailed: root.applyTheme("", root._lastWaybar)
+        onLoadFailed: Qt.callLater(() => root.applyTheme("", root._lastWaybar))
         Component.onCompleted: reload()
     }
 
@@ -186,14 +276,14 @@ Item {
             const txt = text();
             if (txt !== root._lastWaybar) {
                 root._lastWaybar = txt;
-                root.applyTheme(root._lastGhostty, txt);
+                root._requestApply();
             }
         }
-        onLoadFailed: root.applyTheme(root._lastGhostty, "")
+        onLoadFailed: Qt.callLater(() => root.applyTheme(root._lastGhostty, ""))
         Component.onCompleted: reload()
     }
 
-    // Fragmento dedicado futuro (hoja de ruta moonarch): quickshell.json por bundle.
+    // Fragmento dedicado (opcional, D5): quickshell.json por bundle.
     FileView {
         id: overrideView
         path: `${root.themesRoot}/current/quickshell.json`
@@ -205,12 +295,12 @@ Item {
             } catch (e) {
                 root._lastOverride = null;
             }
-            root.applyTheme(root._lastGhostty, root._lastWaybar);
+            root._requestApply();
         }
         onLoadFailed: {
             if (root._lastOverride !== null) {
                 root._lastOverride = null;
-                root.applyTheme(root._lastGhostty, root._lastWaybar);
+                root._requestApply();
             }
         }
         Component.onCompleted: reload()
