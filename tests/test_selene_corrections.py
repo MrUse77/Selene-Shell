@@ -230,6 +230,38 @@ class SeleneCorrectionContracts(unittest.TestCase):
         self.assertRegex(source, r"onPositionChanged:\s*root\.selected\s*=\s*resultDelegate\.index\b")
         self.assertRegex(source, r"onClicked:\s*\{\s*root\.selected\s*=\s*resultDelegate\.index\s*;")
 
+    def test_launcher_root_references_resolve_to_declared_or_base_properties(self) -> None:
+        """Todo `root.<name>` en Launcher.qml debe resolver a una declaracion propia
+        o a una propiedad heredada del tipo base (allowlist explicita).
+
+        Regresion: `root.themesRoot` no estaba declarado en Launcher.qml, evaluaba
+        a undefined y el find de D4 recibia el literal "undefined" como raiz, con
+        lo cual el modo lectura fallaba con
+        `find: 'undefined': No such file or directory`.
+
+        Contrato estructural: colecciona cada referencia `root.<name>`, cada
+        propiedad/funcion declarada en el archivo, y exige que el resto de
+        referencias este en una allowlist minimal de nombres heredados del tipo
+        base de QML. La allowlist nunca debe crecer para silenciar un typo real.
+        """
+        source = LAUNCHER_QML.read_text(encoding="utf-8")
+        declared = set(re.findall(r"\b(?:readonly\s+)?property\s+[\w.<>\[\]]+\s+(\w+)\b", source))
+        declared.update(re.findall(r"\bfunction\s+(\w+)\s*\(", source))
+        used = set(re.findall(r"\broot\.(\w+)\b", source))
+        undeclared = used - declared
+        # Propiedades heredadas del tipo base de QML (PanelWindow), no del
+        # proyecto. Mantener minimal y justificado: agregar un nombre aca exige
+        # verificar que existe en el tipo base, nunca para callar un nombre
+        # mal escrito que el archivo deberia declarar.
+        base_type_allowlist = {"visible"}
+        unresolved = undeclared - base_type_allowlist
+        self.assertEqual(
+            unresolved,
+            set(),
+            "Referencias root.<name> sin declaracion propia ni entrada en la "
+            f"allowlist del tipo base (evaluan a undefined): {sorted(unresolved)}",
+        )
+
     def test_launcher_exposes_migrated_modes_and_safe_processes(self) -> None:
         source = LAUNCHER_QML.read_text(encoding="utf-8")
         for mode in ("apps", "windows", "run", "themes"):
@@ -238,7 +270,7 @@ class SeleneCorrectionContracts(unittest.TestCase):
         self.assertIn("Hyprland.toplevels.values", source)
         self.assertIn('Hyprland.dispatch("focuswindow address:"', source)
         self.assertIn('root.themeSelector, "--list"]', source)
-        self.assertIn('"find", root.themesRoot', source)
+        self.assertIn('"find", Theme.themesRoot', source)
         self.assertIn('[themeSelector, "--apply", item.themeId]', source)
         self.assertIn("Theme.reloadTheme()", source)
         self.assertIn('["wl-copy", calcResult]', source)
@@ -468,9 +500,11 @@ class SeleneCorrectionContracts(unittest.TestCase):
             "El exec del listado debe elegir el argv con el ternario themeListReadOnly",
         )
         self.assertIn(
-            '"find", root.themesRoot',
+            '"find", Theme.themesRoot',
             ternary.group("readonly_argv"),
-            "La rama verdadera del ternario debe ser el listado find sobre themesRoot",
+            "La rama verdadera del ternario debe ser el listado find sobre la "
+            "raiz resuelta Theme.themesRoot, no sobre una referencia no "
+            "declarada en el Launcher",
         )
         self.assertIn(
             '[root.themeSelector, "--list"]',

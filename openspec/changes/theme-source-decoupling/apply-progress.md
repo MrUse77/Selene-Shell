@@ -160,3 +160,28 @@ Validación observada: los cuatro archivos de la suite en verde (37 + 6 + 6 + 4 
    deprecación en la salida del probe (grep sobre la corrida completa: sin `configDir`/`deprecat`).
 
 Validación observada: los cuatro archivos de la suite en verde (39 + 6 + 6 + 4 tests).
+
+## Guardia estructural contra referencias `root.<name>` no declaradas (bug D4)
+
+3. **Bug en la degradación D4 — `root.themesRoot` no declarado en `Launcher.qml`.** La rama de
+   listado en modo lectura del ternario de `loadThemes()` usaba `root.themesRoot`, pero esa
+   propiedad nunca existió en el Launcher: la raíz resuelta vive en el singleton `Theme`
+   (`Services/Theme.qml`, `readonly property string themesRoot`, cadena D3). La referencia
+   evaluaba a `undefined`, el comando se armaba como `find undefined ...` y fallaba con
+   `find: 'undefined': No such file or directory` (exit 1); el Launcher mostraba ese texto de
+   stderr en la barra de estado y no listaba nada. Es decir, el caso exacto que la degradación
+   D4 existe para soportar (sin proveedor disponible) era el roto. Fix: la rama verdadera del
+   ternario usa `Theme.themesRoot`. La cadena D3, `shell.json` y la rama del proveedor quedaron
+   intactas.
+
+   Guardia nuevo (`test_launcher_root_references_resolve_to_declared_or_base_properties`):
+   colecciona cada referencia `root.<name>` del archivo, cada propiedad/función declarada, y
+   exige que las referencias usadas pero no declaradas estén en una allowlist minimal de
+   propiedades heredadas del tipo base (hoy solo `visible`). Contrato primero (RED): falló
+   contra el código previo señalando exactamente `['themesRoot']`; tras el fix quedó en verde
+   con el conjunto restante `['visible']` (58 nombres declarados, medida confirmada). Las dos
+   aserciones que anclaban el string del bug (`'"find", root.themesRoot'` en dos tests) ahora
+   anclan `'"find", Theme.themesRoot'`: un test que fija el texto de un bug es peor que no
+   tener test.
+
+Validación observada: los cuatro archivos de la suite en verde (40 + 6 + 6 + 4 tests).

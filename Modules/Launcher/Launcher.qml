@@ -262,7 +262,7 @@ PanelWindow {
         // Degradación D4: sin comando disponible, listar los directorios de
         // la raíz resuelta en modo lectura con find, en vez de fallar.
         process.exec(themeListReadOnly
-            ? ["find", root.themesRoot, "-mindepth", "1", "-maxdepth", "1", "-type", "d", "-printf", "%f\\n"]
+            ? ["find", Theme.themesRoot, "-mindepth", "1", "-maxdepth", "1", "-type", "d", "-printf", "%f\\n"]
             : [root.themeSelector, "--list"]);
     }
 
