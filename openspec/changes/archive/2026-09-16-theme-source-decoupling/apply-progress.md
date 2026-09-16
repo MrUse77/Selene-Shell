@@ -185,3 +185,68 @@ Validación observada: los cuatro archivos de la suite en verde (39 + 6 + 6 + 4 
    tener test.
 
 Validación observada: los cuatro archivos de la suite en verde (40 + 6 + 6 + 4 tests).
+
+## Verificación en vivo (2026-09-16)
+
+Esta máquina tiene compositor (Hyprland + Wayland), así que las verificaciones que la implementación dejó
+pendientes se corrieron contra la shell viva. El shell se lanzó con el candidato (`qs -d -p <repo>`, para no
+depender de `~/.config/quickshell/selene`), las capturas se hicieron con `grim` y las mediciones de color con
+ImageMagick.
+
+Contexto del entorno, importante: `~/.config/quickshell/selene` dejó de ser el symlink al repo y pasó a ser
+una copia de `main` (`6ea82b1`, 101/101 blobs idénticos, sin los artefactos de este change), junto con un
+`theme-selector` de moonarch actualizado que ahora soporta `--list` y `--apply <id>`: exactamente el argv que
+el launcher ya usaba (antes el proveedor instalado era posicional-único, así que ese camino no podía
+funcionar). Por eso la verificación del candidato se hizo con `qs -p <repo>` y el IPC se direccionó por
+`--pid`.
+
+### 2.3 — aplicar un tema real por el proveedor
+
+Aplicado `theme-selector --apply catppuccin-mocha` (mismo argv que ejecuta `applyTheme()`), con el candidato
+vivo:
+
+| Estado | Fondo del panel (núcleo) | Púrpura `Theme.purple` (fuzz 1%) |
+| --- | --- | --- |
+| tokyo-night (antes) | `#1A1B26` | `#bb9af7` ×6, `#F5C2E7` ×0 |
+| catppuccin-mocha | `#11111B` | `#bb9af7` ×0, `#F5C2E7` ×6 |
+| tokyo-night (vuelto) | `#1A1B26` | `#bb9af7` ×6, `#F5C2E7` ×0 |
+
+Medido sobre el glifo `Theme.purple` del dashboard (fila de energía, "Reiniciar"). El log de la instancia
+viva confirmó la misma paleta por su cuenta: `[selene:theme] paleta aplicada — bg #11111b accent #a6adc8`.
+La convergencia se completó antes de la primera captura (+0,6 s), sin ventana de paleta mezclada (no hay
+`quickshell.json` en ningún bundle; ver 3.1). Límite declarado: no hay inyección de teclado en la sesión (no
+hay `wtype`/`ydotool`), así que el apply se hizo por el proveedor y no con Enter sobre la fila de la UI; el
+modo Themes sí se abrió por IPC y se capturó listando los 12 bundles.
+
+### 5.1 — modo Themes sin proveedor
+
+Con `SHELL_THEME_COMMAND=/ruta/que-no-existe`: el modo Themes abre, lista los 12 bundles de la raíz real y
+muestra `Listing themes read-only: applying requires a theme provider`; no queda en `themesLoading` y el
+resto de la shell arranca normal.
+
+Prueba específica del bug de D4, con `SHELL_THEMES_ROOT=/tmp/verify-root` (tres directorios y un symlink
+`current`): la lista mostró exactamente esos tres nombres y excluyó el symlink. Si la rama de listado
+siguiera usando la referencia indefinida (`root.themesRoot`), el comando habría sido `find undefined ...` y
+no habría listado nada.
+
+### 5.2 — regresión visual
+
+A/B contra la copia instalada de `main` (`6ea82b1`), mismo tema (tokyo-night) y misma pantalla:
+
+| Vista | Píxeles distintos (AE) | Qué difiere |
+| --- | --- | --- |
+| Barra (1920×40) | 27 / 76.800 | solo dígitos de CPU/RAM/reloj |
+| Dashboard | 218 / 2.073.600 | solo números dinámicos (CPU, RAM, uptime, batería) |
+| Chrome del launcher (tabs + pie) | 0 y 0.013 px | nada |
+
+El top de colores es idéntico entre candidato y `main` (`#171821` en la barra, `#1A1B26` en el dashboard). El
+contenido de la lista de apps varió entre corridas: `DesktopEntries.applications.values` carga de forma
+asíncrona y se comprobó que el orden varía incluso entre dos aperturas de la misma instancia de `main`, así
+que no es una diferencia de este change (el diff no toca la rama de apps de `updateResults()`).
+
+### 3.1 — sigue sin tildar, con motivo
+
+Ningún bundle de moonarch empaqueta `quickshell.json` (verificado: `ls themes/*/quickshell.json` no devuelve
+nada), así que el síntoma en vivo de D6 sigue sin ser observable. El fix (los tres `FileView` en
+`reloadTheme()`) está en el código y cubierto por el contrato de 4.3; su verificación de runtime es el ítem
+del roadmap del lado de moonarch.

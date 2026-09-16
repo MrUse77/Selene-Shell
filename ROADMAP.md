@@ -18,7 +18,7 @@ sustrato (Arch + Hyprland + un CLI).
 | --- | --- | --- | --- |
 | Qué es | una shell, con sus dots aparte | una distribución entera | una distro con la shell como componente de primera clase |
 | Empaquetado | shell propio (AUR, Nix), instalable solo | distro completa | **pendiente** |
-| Config | `shell.json` propio, con `paths.*` | — | **en curso** (este es el change activo) |
+| Config | `shell.json` propio, con `paths.*` | — | **hecho**: `shell.json` propio con `themesRoot` y `themeCommand` |
 | Temas | esquema derivado del fondo de pantalla | manual de "hacé tu propio tema" | bundles + contrato de fragmentos, **a publicar** |
 | Rollback | — | **snapshots de sistema** | **por target**, con journal y digests |
 | Hardware | — | **decenas de scripts `omarchy-hw-*`** | declarar defaults, no adivinar |
@@ -91,7 +91,12 @@ los mantengamos nosotros. Es el eje que **compone**; el multi-escritorio es el q
 
 ### De este lado (Selene)
 
-- [ ] **`theme-source-decoupling`** — en curso. Ver `openspec/changes/theme-source-decoupling/`.
+- [x] **`theme-source-decoupling`** — implementado, verificado en vivo y archivado el
+      2026-09-16. El contrato vive en `openspec/specs/theme-system/spec.md` y el
+      registro en `openspec/changes/archive/2026-09-16-theme-source-decoupling/`.
+      Queda sin verificar en vivo el síntoma de D6 (ventana de paleta mezclada)
+      porque necesita un bundle que empaquete `quickshell.json`: es el ítem de
+      moonarch de abajo.
 - [ ] **CI**. No hay `.github/` en este repo: sin workflow, sin lint, sin tests en
       cada push. Los contract tests existen y se corren a mano. Caelestia tiene
       build, lint, format y release.
@@ -105,10 +110,13 @@ los mantengamos nosotros. Es el eje que **compone**; el multi-escritorio es el q
 
 - [ ] **Empaquetar `quickshell.json` en los 13 bundles** — el fragmento dedicado
       que Selene ya sabe leer con prioridad total. Hoy no existe en ningún bundle,
-      así que el hook está dormido.
+      así que el hook está dormido y el último síntoma de D6 (hasta 1 s de paleta
+      mezclada al re-temar) todavía no se puede observar en vivo.
 - [ ] **Arreglar la rama de reload de Waybar** en `theme-selector`
       (`pgrep -x waybar` / `pkill -SIGUSR2 waybar`): es un rastro del stack
       retirado, y sacarlo necesita delta del spec de `moonarch-theme-selector`.
+      El mismo script ya llama `qs -c selene ipc call selene themeReload` al aplicar,
+      que es el camino por el que Selene converge al instante.
 - [ ] **Borrar `cli/pkg/installer/packages.go`** — lista muerta con waybar, wofi,
       dunst, `aur/eww` y `aur/wlogout`, con cero callers.
 
