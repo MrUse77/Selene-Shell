@@ -4,7 +4,8 @@ import Quickshell.Hyprland
 import "../../Services"
 import "../../Components"
 
-// Workspaces del monitor (split-monitor-workspaces: 5 por monitor).
+// Workspaces del monitor (split-monitor-workspaces: la cantidad por monitor se
+// resuelve en runtime, ver workspacesPerMonitor; no se asume ninguna maquina).
 // El indicador activo se desliza — movimiento de marea, no teleport.
 Item {
     id: root
@@ -13,6 +14,23 @@ Item {
 
     implicitHeight: 34
     implicitWidth: row.implicitWidth
+
+    // Cantidad de workspaces por monitor: SHELL_WORKSPACES_PER_MONITOR (env
+    // neutra) → shell.json.workspacesPerMonitor → default 5. Un valor invalido
+    // (no entero o < 1) cae al default; todo valor se acota a 1..64 para que
+    // uno absurdo (p.ej. 1e9) no materialize esa cantidad de items.
+    readonly property int workspacesPerMonitor: {
+        const fallback = 5;
+        const maxWorkspaces = 64;
+        const raw = Theme.pick(
+            Quickshell.env("SHELL_WORKSPACES_PER_MONITOR"),
+            Theme.settingsWorkspacesPerMonitor,
+            ""
+        );
+        const n = Number(raw);
+        if (!Number.isInteger(n) || n < 1) return fallback;
+        return Math.min(n, maxWorkspaces);
+    }
 
     readonly property var monitor: Hyprland.monitorFor(screen ?? null)
 
@@ -25,7 +43,7 @@ Item {
         out.sort((a, b) => a.id - b.id);
         // Fallback si aún no existen los persistentes
         if (out.length === 0) {
-            for (let n = 1; n <= 5; n++)
+            for (let n = 1; n <= root.workspacesPerMonitor; n++)
                 out.push({ id: n, name: String(n), active: false, urgent: false });
         }
         return out;

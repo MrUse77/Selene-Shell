@@ -1,4 +1,6 @@
 {
     "themesRoot": null,
-    "themeCommand": null
+    "themeCommand": null,
+    "workspacesPerMonitor": null,
+    "tempSensor": null
 }

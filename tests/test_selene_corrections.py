@@ -26,6 +26,9 @@ POWER_MENU_QML = PROJECT_ROOT / "Modules" / "PowerMenu" / "PowerMenu.qml"
 LAUNCHER_LOGIC_JS = PROJECT_ROOT / "Services" / "LauncherLogic.js"
 OPERATION_STATE_JS = PROJECT_ROOT / "Services" / "OperationState.js"
 THEME_QML = PROJECT_ROOT / "Services" / "Theme.qml"
+WORKSPACES_QML = PROJECT_ROOT / "Modules" / "Bar" / "Workspaces.qml"
+HARDWARE_QML = PROJECT_ROOT / "Services" / "Hardware.qml"
+UPDATES_QML = PROJECT_ROOT / "Services" / "Updates.qml"
 SHELL_JSON = PROJECT_ROOT / "shell.json"
 README = PROJECT_ROOT / "README.md"
 
@@ -450,6 +453,39 @@ class SeleneCorrectionContracts(unittest.TestCase):
             "Theme debe exponer el valor de settings para el comando de temas",
         )
 
+    def test_workspaces_per_monitor_resolved_not_hardcoded(self) -> None:
+        """La cantidad de workspaces por monitor se resuelve en runtime, no 5 fijo (T1)."""
+        source = WORKSPACES_QML.read_text(encoding="utf-8")
+        self.assertNotIn(
+            "<= 5",
+            source,
+            "El fallback de workspaces no puede asumir 5 por monitor como literal",
+        )
+        neutral = source.index('Quickshell.env("SHELL_WORKSPACES_PER_MONITOR")')
+        setting = source.index("workspacesPerMonitor", neutral)
+        self.assertLess(
+            neutral, setting,
+            "La env de nombre neutro debe preceder al setting shell.json en la cadena",
+        )
+        self.assertRegex(source, r"Theme\.settingsWorkspacesPerMonitor")
+        # Cota superior: un valor absurdo no puede materializar infinitos items.
+        self.assertRegex(
+            source,
+            r"maxWorkspaces\s*=\s*64\b",
+            "El clamp de workspaces por monitor debe tener cota 64",
+        )
+        self.assertRegex(
+            source,
+            r"Math\.min\(n,\s*maxWorkspaces\)",
+            "El valor resuelto debe acotarse con Math.min",
+        )
+        shell_settings = json.loads(SHELL_JSON.read_text(encoding="utf-8"))
+        self.assertIn("workspacesPerMonitor", shell_settings, "shell.json debe declarar workspacesPerMonitor")
+        self.assertIsNone(
+            shell_settings["workspacesPerMonitor"],
+            "workspacesPerMonitor debe ser null (usa el default) o un entero >= 1",
+        )
+
     def test_themes_root_resolution_is_neutral_first_with_moonarch_alias(self) -> None:
         """La raíz de temas se resuelve neutro primero, con alias y default de moonarch (tareas 1.2/1.3)."""
         theme_source = THEME_QML.read_text(encoding="utf-8")
@@ -623,11 +659,139 @@ class SeleneCorrectionContracts(unittest.TestCase):
         for function in ("normalizeMode", "cycleMode", "parseCommand", "rankItems"):
             self.assertRegex(source, rf"function\s+{function}\s*\(")
 
+    def test_theme_settings_references_name_declared_properties(self) -> None:
+        """Todo `Theme.settingsX` usado fuera de Theme.qml debe nombrar una propiedad declarada.
+
+        Regresión: Workspaces.qml y Hardware.qml consumían `Theme.settings?.*`,
+        pero Theme solo declara `property var _settings` (privada) más
+        propiedades derivadas públicas `settings*`. El miembro inexistente
+        evaluaba a undefined y la cadena caía siempre al default: el setting de
+        shell.json nunca se leía. Contrato doble: (1) Theme.qml declara las
+        propiedades derivadas esperadas; (2) cada referencia `Theme.settingsX`
+        en el resto del árbol es una de esas propiedades declaradas.
+        """
+        theme_source = THEME_QML.read_text(encoding="utf-8")
+        declared = set(re.findall(r"readonly\s+property\s+string\s+(settings\w+)\b", theme_source))
+        for name in (
+            "settingsThemesRoot",
+            "settingsThemeCommand",
+            "settingsWorkspacesPerMonitor",
+            "settingsTempSensor",
+        ):
+            self.assertIn(name, declared, f"Theme.qml debe declarar la propiedad derivada {name}")
+        offenders = []
+        for path in sorted(PROJECT_ROOT.rglob("*.qml")):
+            if path.name == "Theme.qml":
+                continue
+            for match in re.finditer(r"\bTheme\.(settings\w*)", path.read_text(encoding="utf-8")):
+                if match.group(1) not in declared:
+                    offenders.append(f"{path.relative_to(PROJECT_ROOT)}: Theme.{match.group(1)}")
+        self.assertEqual(
+            offenders,
+            [],
+            "Referencias Theme.settings* a miembros que Theme.qml no declara "
+            "(evaluan a undefined y la cadena cae al default): " + ", ".join(offenders),
+        )
+
     def test_operation_state_is_a_pure_helper(self) -> None:
         self.assertTrue(OPERATION_STATE_JS.exists())
         source = OPERATION_STATE_JS.read_text(encoding="utf-8")
         for function in ("idle", "begin", "started", "finish", "startupTimeout", "isBusy"):
             self.assertRegex(source, rf"function\s+{function}\s*\(")
+
+    def test_hardware_temp_sensor_is_resolved_and_reported(self) -> None:
+        """El sensor de temperatura se resuelve por cadena y reporta su estado (T2).
+
+        Regresión: Hardware.qml leía el primer hwmon y asumía k10temp (AMD).
+        Sin sensor, `temp` quedaba en 0 y el widget no lo mostraba: falla
+        invisible. Ahora la resolución es env neutra -> shell.json ->
+        autodetección por name -> primer hwmon, y `tempAvailable`/`tempSource`
+        distinguen "sin lectura" de una temperatura real.
+        """
+        source = HARDWARE_QML.read_text(encoding="utf-8")
+        self.assertRegex(source, r"property\s+bool\s+tempAvailable\b")
+        self.assertRegex(source, r"property\s+string\s+tempSource\b")
+        neutral = source.index('Quickshell.env("SHELL_TEMP_SENSOR")')
+        setting = source.index("tempSensor", neutral)
+        self.assertLess(
+            neutral, setting,
+            "La env de nombre neutro debe preceder al setting shell.json en la cadena",
+        )
+        self.assertRegex(source, r"Theme\.settingsTempSensor")
+        for name in ("k10temp", "coretemp", "zenpower", "cpu_thermal"):
+            self.assertIn(name, source, f"La autodetección debe contemplar {name}")
+        self.assertNotRegex(
+            source,
+            r"cat /sys/class/hwmon/hwmon\*/temp1_input[^\"`]*\|\s*head\s+-n1",
+            "No se puede seguir leyendo ciegamente el primer hwmon",
+        )
+        # El comando emite UNA línea "<fuente> <miligrados>" para SplitParser.
+        # Las comillas del shell pueden aparecer escapadas dentro del literal JS.
+        self.assertRegex(source, r"cat \\?\"?\$d/temp1_input", "El comando debe leer temp1_input")
+        # El valor configurado acepta tres formas: nombre de sensor, dispositivo
+        # hwmonN y ruta (a temp*_input o al directorio hwmon).
+        self.assertRegex(
+            source,
+            r"case \"\$cfg\" in",
+            "El comando debe ramificar por la forma del valor configurado",
+        )
+        self.assertRegex(source, r"hwmon\[0-9\]\*\)", "Debe aceptar un dispositivo hwmonN")
+        self.assertRegex(source, r"\"\$cfg/temp1_input\"", "Debe aceptar una ruta a un directorio hwmon")
+        # Validación de entrada: nunca se interpola un valor sin validar en
+        # el texto del comando (la interpolación ejecuta $() del usuario).
+        self.assertRegex(
+            source,
+            r"\^\[A-Za-z0-9",
+            "El valor configurado debe validarse contra un patrón seguro de caracteres",
+        )
+        self.assertRegex(
+            source,
+            r'"selene-temp",\s*root\._tempSensorConfig',
+            "El valor validado debe pasarse como argumento del comando, no interpolado",
+        )
+        # Reset del estado antes de lanzar el proceso: si el sensor desaparece,
+        # el comando no emite nada y onRead no corre; sin el reset, un sensor
+        # perdido seguiría reportando tempAvailable === true con valor rancio.
+        refresh_body = re.search(r"function\s+refreshProcs\s*\(\)\s*\{(.*?)\n    \}", source, re.DOTALL)
+        self.assertIsNotNone(refresh_body, "refreshProcs debe existir")
+        body = refresh_body.group(1)
+        reset = body.index("tempAvailable = false")
+        launch = body.index("tempProc.exec")
+        self.assertLess(
+            reset, launch,
+            "tempAvailable debe resetearse al inicio de refreshProcs, antes de "
+            "lanzar el proceso: si el comando no emite nada, onRead nunca corre",
+        )
+        self.assertNotRegex(
+            body,
+            r"temp\s*=\s*0",
+            "temp no debe resetearse en cada muestreo (evita parpadeo); los "
+            "consumidores consultan tempAvailable",
+        )
+        # Sin lectura utilizable: nunca un 0 indistinguible de lectura real.
+        self.assertRegex(source, r"root\.tempAvailable\s*=\s*false")
+        self.assertRegex(source, r"root\.tempAvailable\s*=\s*true")
+        shell_settings = json.loads(SHELL_JSON.read_text(encoding="utf-8"))
+        self.assertIn("tempSensor", shell_settings, "shell.json debe declarar tempSensor")
+        self.assertIsNone(
+            shell_settings["tempSensor"],
+            "tempSensor debe ser null (autodetección) o un nombre de hwmon",
+        )
+
+    def test_updates_unavailable_is_distinguished_from_zero(self) -> None:
+        """'No pude chequear' no puede verse igual que '0 pendientes' (T3).
+
+        Regresión: `{ checkupdates; paru -Qua; } | sort -u | grep -c . || true`
+        daba 0 cuando las herramientas no existen, y UpdatesWidget ocultaba el
+        widget: un chequeo fallido se veía igual que estar al día.
+        """
+        source = UPDATES_QML.read_text(encoding="utf-8")
+        self.assertRegex(source, r"property\s+bool\s+unavailable\b")
+        self.assertIn("command -v checkupdates", source)
+        self.assertIn("command -v paru", source)
+        self.assertIn("echo -1", source)
+        self.assertRegex(source, r"unavailable\s*=\s*n\s*===\s*-1")
+        self.assertRegex(source, r"property\s+int\s+count\b", "count conserva su semántica")
 
 
 if __name__ == "__main__":

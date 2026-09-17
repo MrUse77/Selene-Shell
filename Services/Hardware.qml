@@ -1,6 +1,7 @@
 pragma Singleton
 
 import QtQuick
+import Quickshell
 import Quickshell.Io
 
 // Métricas del sistema. /proc reporta tamaño 0, así que los watchers de
@@ -13,6 +14,30 @@ Item {
 
     property real cpu: 0        // 0..100
     property real ram: 0        // 0..100
+    // ---- Temperatura ----
+    // Sensor resoluble por cadena: SHELL_TEMP_SENSOR (env neutra) →
+    // shell.json.tempSensor (Theme.settingsTempSensor) → autodetección por
+    // `name` del hwmon (k10temp/coretemp/zenpower/cpu_thermal) → primer
+    // hwmon (último recurso, comportamiento actual).
+    // El valor configurado acepta tres formas (si no matchea el patrón
+    // seguro de caracteres, se ignora y cae a autodetección):
+    //   nombre de sensor ("k10temp")   → matchea el `name` del hwmon
+    //   dispositivo ("hwmon4")        → /sys/class/hwmon/hwmon4/temp1_input
+    //   ruta (a temp*_input o al directorio hwmon)
+    // Nunca se interpola un valor sin validar en el texto del comando:
+    // la validación va en QML y el valor entra como argumento del `sh -c`.
+    readonly property string _tempSensorConfig: {
+        const raw = Theme.pick(
+            Quickshell.env("SHELL_TEMP_SENSOR"),
+            Theme.settingsTempSensor,
+            ""
+        ).trim();
+        // Solo caracteres seguros para sh: letras, dígitos, / _ . -
+        return /^[A-Za-z0-9/_.-]+$/.test(raw) ? raw : "";
+    }
+
+    property bool tempAvailable: false
+    property string tempSource: ""
     property real temp: 0       // °C
     property real disk: 0       // 0..100
     property real uptimeSec: 0
@@ -73,15 +98,96 @@ Item {
         }
     }
 
-    // ---- Temperatura: primer hwmon (k10temp Tctl en este equipo) ----
+    // El comando emite UNA línea "<fuente> <miligrados>" (dos campos
+    // separados por espacios): SplitParser entrega la línea entera y el
+    // handler separa ambos campos acá.
     property Process tempProc: Process {
         stdout: SplitParser {
             onRead: data => {
-                const v = parseFloat(data);
-                if (!isNaN(v)) root.temp = Math.round(v / 1000);
+                const fields = data.trim().split(/\s+/);
+                if (fields.length !== 2) {
+                    root.tempAvailable = false;
+                    root.tempSource = "";
+                    return;
+                }
+                const v = parseFloat(fields[1]);
+                if (isNaN(v)) {
+                    root.tempAvailable = false;
+                    root.tempSource = "";
+                    return;
+                }
+                root.tempSource = fields[0];
+                root.temp = Math.round(v / 1000);
+                root.tempAvailable = true;
             }
         }
     }
+
+    // Script de lectura del sensor (POSIX sh). Emite UNA línea
+    // "<fuente> <miligrados>", o nada si no hay lectura. El valor
+    // configurado llega como $1 (ya validado en _tempSensorConfig):
+    //   1) ruta: al propio temp*_input o al directorio hwmon
+    //   2) dispositivo hwmonN
+    //   3) nombre de sensor matcheando el `name` del hwmon
+    //   4) autodetección por name conocido
+    //   5) primer hwmon existente (último recurso, comportamiento actual)
+    readonly property string _tempScript: [
+        'cfg="$1"',
+        'sys=/sys/class/hwmon',
+        'if [ -n "$cfg" ]; then',
+        '  case "$cfg" in',
+        '    */*)',
+        '      d=""',
+        '      if [ -r "$cfg" ]; then',
+        '        d=$(dirname "$cfg")',
+        '      elif [ -r "$cfg/temp1_input" ]; then',
+        '        d="$cfg"',
+        '      fi',
+        '      if [ -n "$d" ] && [ -r "$d/temp1_input" ]; then',
+        '        s=$(cat "$d/name" 2>/dev/null)',
+        '        [ -n "$s" ] || s=$(basename "$d")',
+        '        echo "$s $(cat "$d/temp1_input")"',
+        '        exit 0',
+        '      fi',
+        '      ;;',
+        '    hwmon[0-9]*)',
+        '      if [ -r "$sys/$cfg/temp1_input" ]; then',
+        '        s=$(cat "$sys/$cfg/name" 2>/dev/null)',
+        '        [ -n "$s" ] || s="$cfg"',
+        '        echo "$s $(cat "$sys/$cfg/temp1_input")"',
+        '        exit 0',
+        '      fi',
+        '      ;;',
+        '    *)',
+        '      for d in "$sys"/hwmon*; do',
+        '        if [ "$(cat "$d/name" 2>/dev/null)" = "$cfg" ] && [ -r "$d/temp1_input" ]; then',
+        '          echo "$cfg $(cat "$d/temp1_input")"',
+        '          exit 0',
+        '        fi',
+        '      done',
+        '      ;;',
+        '  esac',
+        'fi',
+        'for d in "$sys"/hwmon*; do',
+        '  n=$(cat "$d/name" 2>/dev/null)',
+        '  case "$n" in',
+        '    k10temp|coretemp|zenpower|cpu_thermal)',
+        '      if [ -r "$d/temp1_input" ]; then',
+        '        echo "$n $(cat "$d/temp1_input")"',
+        '        exit 0',
+        '      fi',
+        '      ;;',
+        '  esac',
+        'done',
+        'for d in "$sys"/hwmon*; do',
+        '  if [ -r "$d/temp1_input" ]; then',
+        '    n=$(cat "$d/name" 2>/dev/null)',
+        '    [ -n "$n" ] || n=$(basename "$d")',
+        '    echo "$n $(cat "$d/temp1_input")"',
+        '    exit 0',
+        '  fi',
+        'done'
+    ].join("\n")
 
     // ---- Disco: porcentaje usado de / ----
     property Process diskProc: Process {
@@ -94,8 +200,14 @@ Item {
     }
 
     function refreshProcs() {
-        tempProc.exec(["sh", "-c",
-            "cat /sys/class/hwmon/hwmon*/temp1_input 2>/dev/null | head -n1"]);
+        // Reset del estado ANTES de lanzar: si el comando no emite nada
+        // (sensor perdido o inexistente), onRead nunca corre y un estado
+        // viejo quedaría "disponible" con valor rancio. `temp` NO se
+        // resetea (evita parpadeo); el contrato es que los consumidores
+        // consulten tempAvailable.
+        root.tempAvailable = false;
+        root.tempSource = "";
+        tempProc.exec(["sh", "-c", root._tempScript, "selene-temp", root._tempSensorConfig]);
         diskProc.exec(["df", "--output=pcent", "/"]);
     }
 
