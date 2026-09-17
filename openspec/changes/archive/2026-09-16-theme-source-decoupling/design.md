@@ -89,3 +89,65 @@ La suite de Selene son **contract tests estructurales**: leen el código fuente 
 - **Sin cambios de comportamiento por defecto**: con la configuración actual Selene resuelve los mismos valores que hoy, y los mismos colores.
 - **MoonArch**: no necesita cambios para que esto funcione. Lo que sí necesita, como trabajo propio y posterior, es empaquetar `quickshell.json` en los 13 bundles y arreglar la rama de reload de Waybar en `theme-selector`.
 - **Compatibilidad**: los setups que ya usan `MOONARCH_THEMES_ROOT` siguen funcionando sin tocar nada.
+
+## Desviaciones registradas durante la implementación
+
+### D2: `ShellSettings` de la versión instalada no soporta settings propios
+
+Verificado contra la versión instalada (`qs -V` → Quickshell 0.3.1, AUR `quickshell-git`) leyendo
+`/usr/lib/qt6/qml/Quickshell/quickshell-core.qmltypes`: el tipo `QuickshellSettings` de esta
+versión expone **solo** `workingDirectory` y `watchFiles`. No existe en esta versión ningún mecanismo
+de properties custom cargadas desde `~/.config/quickshell/<config>/shell.json` (ni el binario
+contiene ninguna referencia a `shell.json`), así que declarar `themesRoot` y `themeCommand` ahí
+directamente, como asumía D2, **no es posible hoy**.
+
+Se implementa la misma idea del lado de Selene, preservando la intención de D2 (la shell tiene su
+propio archivo de config, en la misma ubicación prevista):
+
+- `Theme.qml` lee `<Quickshell.configDir>/shell.json` con un `FileView` propio (`watchChanges: true`,
+  que cumple en la práctica el recargado en vivo que `settings.watchFiles` buscaba), parsea el JSON
+  y expone los valores crudos como `Theme.settingsThemesRoot` y `Theme.settingsThemeCommand`.
+- El archivo de settings se versiona en la raíz del repo (`shell.json`), que en runtime es
+  exactamente `~/.config/quickshell/selene/shell.json` gracias al symlink existente.
+- Los defaults de moonarch viven en el código (`themesRoot` y `Theme.defaultThemeCommand`), y en
+  `shell.json` los dos valores están en `null`: un valor `null` o una clave ausente significa
+  "usar el default". Un string no vacío configura la clave.
+- La cadena de D3 no cambia: env neutro → env histórica → setting → default, y el default resuelve
+  idéntico a hoy.
+
+### D3: el alias `MOONARCH_THEME_COMMAND` no protege ninguna configuración existente
+
+Se implementa el alias tal como está escrito en D3, pero con una constatación honesta:
+`MOONARCH_THEME_COMMAND` **nunca existió** en este código (el comando estaba hardcodeado en
+`Launcher.qml`), así que el alias no preserva ningún setup previo del comando; solo deja la
+simetría con `MOONARCH_THEMES_ROOT` (ese sí existía y sigue funcionando como alias). El nombre
+neutro nuevo es `SHELL_THEME_COMMAND`.
+
+### D4 (detalle de implementación): el default del comando vive en `Theme`, no en `Launcher`
+
+La cadena de resolución de `themeCommand` vive en `Launcher.qml` (como pide la tarea 1.3), pero el
+literal del default de moonarch vive en `Theme.defaultThemeCommand`, para que
+`grep -n "theme-selector" Modules/Launcher/Launcher.qml` no devuelva ningún literal (verificación
+de la tarea 2.1) mientras el default se conserva.
+
+### D3.2 (tarea 3.2): agrupación con `Qt.callLater`, sin debounce
+
+Antes: cada `onLoaded` de los tres `FileView` llamaba a `applyTheme`, así que un cambio de bundle
+disparaba hasta tres aplicaciones. Decisión: los tres `onLoaded`/`onLoadFailed` ahora solo
+actualizan sus caches (`_lastGhostty`, `_lastWaybar`, `_lastOverride`) y piden una aplicación vía
+`_requestApply()`, que usa `Qt.callLater` sobre `_applyCached()`. `Qt.callLater` coalesce las
+llamadas repetidas dentro del mismo ciclo del event loop: las tres lecturas que llegan juntas
+convergen en **una sola aplicación** por cambio, sin timer extra ni constantes de debounce.
+Si las lecturas llegan en ciclos separados (recarga asincrónica), puede aplicar dos veces, pero
+la última siempre es la correcta y el estado final converge. El poll de 1 s queda igual.
+
+### D3.3 (tarea 5.1): el parseo del palette ANSI pertenece a este change
+
+El delta `theme-system` de este change re-declara el requirement de derivar la paleta desde
+`ghostty.conf` ("colores ANSI 0–15"). Ese requirement no se cumple hoy: `parseGhostty` divide cada
+línea en el primer `=` y matchea el índice solo contra la clave (`palette N = #RRGGBB`), mientras que
+los 13 bundles reales usan la forma `palette = N=#RRGGBB`, donde el índice vive en el valor. El
+resultado era que `p0`–`p15` quedaban vacíos y los tokens derivados de ellos (`success`, `warning`,
+`purple`, `cyan`, `gray`) conservaban silenciosamente el fallback Tokyo Night. El fix agrega la rama
+por valor (gated a la clave `palette`) sin eliminar la forma legada; no cambia la prioridad ni el
+fallback de ningún otro token.

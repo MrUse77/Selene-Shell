@@ -2,7 +2,7 @@
 
 ## MODIFIED Requirements
 
-### Requirement: Derivar paleta desde el bundle activo
+### Requirement: Derivar paleta desde el bundle activo de moonarch
 
 El sistema SHALL derivar la paleta de colores leyendo `<raíz de temas>/current/ghostty.conf` (colores ANSI 0–15, background, foreground) y completar acentos con `<raíz de temas>/current/waybar.css` cuando esté disponible, donde `<raíz de temas>` es el valor resuelto según el requirement de fuente de temas configurable. Los tokens derivados (fondo, superficies, texto, acento, urgentes, glow) MUST ser consumidos por todos los módulos, sin colores hardcodeados por módulo.
 

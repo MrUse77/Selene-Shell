@@ -7,6 +7,7 @@ Quickshell or interacting with the desktop session.
 """
 
 from pathlib import Path
+import json
 import re
 import subprocess
 import unittest
@@ -24,6 +25,8 @@ DASHBOARD_QML = PROJECT_ROOT / "Modules" / "Dashboard" / "Dashboard.qml"
 POWER_MENU_QML = PROJECT_ROOT / "Modules" / "PowerMenu" / "PowerMenu.qml"
 LAUNCHER_LOGIC_JS = PROJECT_ROOT / "Services" / "LauncherLogic.js"
 OPERATION_STATE_JS = PROJECT_ROOT / "Services" / "OperationState.js"
+THEME_QML = PROJECT_ROOT / "Services" / "Theme.qml"
+SHELL_JSON = PROJECT_ROOT / "shell.json"
 README = PROJECT_ROOT / "README.md"
 
 
@@ -227,6 +230,38 @@ class SeleneCorrectionContracts(unittest.TestCase):
         self.assertRegex(source, r"onPositionChanged:\s*root\.selected\s*=\s*resultDelegate\.index\b")
         self.assertRegex(source, r"onClicked:\s*\{\s*root\.selected\s*=\s*resultDelegate\.index\s*;")
 
+    def test_launcher_root_references_resolve_to_declared_or_base_properties(self) -> None:
+        """Todo `root.<name>` en Launcher.qml debe resolver a una declaracion propia
+        o a una propiedad heredada del tipo base (allowlist explicita).
+
+        Regresion: `root.themesRoot` no estaba declarado en Launcher.qml, evaluaba
+        a undefined y el find de D4 recibia el literal "undefined" como raiz, con
+        lo cual el modo lectura fallaba con
+        `find: 'undefined': No such file or directory`.
+
+        Contrato estructural: colecciona cada referencia `root.<name>`, cada
+        propiedad/funcion declarada en el archivo, y exige que el resto de
+        referencias este en una allowlist minimal de nombres heredados del tipo
+        base de QML. La allowlist nunca debe crecer para silenciar un typo real.
+        """
+        source = LAUNCHER_QML.read_text(encoding="utf-8")
+        declared = set(re.findall(r"\b(?:readonly\s+)?property\s+[\w.<>\[\]]+\s+(\w+)\b", source))
+        declared.update(re.findall(r"\bfunction\s+(\w+)\s*\(", source))
+        used = set(re.findall(r"\broot\.(\w+)\b", source))
+        undeclared = used - declared
+        # Propiedades heredadas del tipo base de QML (PanelWindow), no del
+        # proyecto. Mantener minimal y justificado: agregar un nombre aca exige
+        # verificar que existe en el tipo base, nunca para callar un nombre
+        # mal escrito que el archivo deberia declarar.
+        base_type_allowlist = {"visible"}
+        unresolved = undeclared - base_type_allowlist
+        self.assertEqual(
+            unresolved,
+            set(),
+            "Referencias root.<name> sin declaracion propia ni entrada en la "
+            f"allowlist del tipo base (evaluan a undefined): {sorted(unresolved)}",
+        )
+
     def test_launcher_exposes_migrated_modes_and_safe_processes(self) -> None:
         source = LAUNCHER_QML.read_text(encoding="utf-8")
         for mode in ("apps", "windows", "run", "themes"):
@@ -234,7 +269,8 @@ class SeleneCorrectionContracts(unittest.TestCase):
         self.assertIn("LauncherLogic.parseCommand", source)
         self.assertIn("Hyprland.toplevels.values", source)
         self.assertIn('Hyprland.dispatch("focuswindow address:"', source)
-        self.assertIn('[themeSelector, "--list"]', source)
+        self.assertIn('root.themeSelector, "--list"]', source)
+        self.assertIn('"find", Theme.themesRoot', source)
         self.assertIn('[themeSelector, "--apply", item.themeId]', source)
         self.assertIn("Theme.reloadTheme()", source)
         self.assertIn('["wl-copy", calcResult]', source)
@@ -366,6 +402,199 @@ class SeleneCorrectionContracts(unittest.TestCase):
                 re.DOTALL,
             ),
             "A launcher already visible must consume same-kind IPC mode changes",
+        )
+
+    def test_theme_command_resolution_is_configurable_not_hardcoded(self) -> None:
+        """El comando de temas se resuelve por la cadena configurable, no como literal (tarea 4.1)."""
+        source = LAUNCHER_QML.read_text(encoding="utf-8")
+        self.assertRegex(
+            source,
+            r"readonly\s+property\s+string\s+themeSelector\s*:\s*Theme\.pick\(",
+            "themeSelector debe resolverse mediante Theme.pick con la cadena de D3",
+        )
+        self.assertRegex(
+            source,
+            r'Quickshell\.env\("SHELL_THEME_COMMAND"\)',
+            "La cadena debe empezar por la variable de entorno de nombre neutro",
+        )
+        self.assertRegex(
+            source,
+            r'Quickshell\.env\("MOONARCH_THEME_COMMAND"\)',
+            "El alias de compatibilidad de moonarch debe seguir aceptándose",
+        )
+        self.assertRegex(
+            source,
+            r"Theme\.settingsThemeCommand",
+            "El comando debe poder venir del archivo de settings de la shell",
+        )
+        self.assertNotRegex(
+            source,
+            r'themeSelector\s*:\s*Quickshell\.env\("HOME"\)\s*\+',
+            "El comando de temas no puede declararse como literal concatenando $HOME",
+        )
+        self.assertNotIn(
+            "moonarch/theme-selector",
+            source,
+            "El path del selector de moonarch no debe vivir como literal en Launcher.qml",
+        )
+        theme_source = THEME_QML.read_text(encoding="utf-8")
+        self.assertRegex(
+            theme_source,
+            r'readonly\s+property\s+string\s+defaultThemeCommand\s*:\s*'
+            r'Quickshell\.env\("HOME"\)\s*\+\s*"/\.local/bin/moonarch/theme-selector"',
+            "El default de moonarch debe conservarse como default, no como requisito",
+        )
+        self.assertRegex(
+            theme_source,
+            r"readonly\s+property\s+string\s+settingsThemeCommand",
+            "Theme debe exponer el valor de settings para el comando de temas",
+        )
+
+    def test_themes_root_resolution_is_neutral_first_with_moonarch_alias(self) -> None:
+        """La raíz de temas se resuelve neutro primero, con alias y default de moonarch (tareas 1.2/1.3)."""
+        theme_source = THEME_QML.read_text(encoding="utf-8")
+        self.assertIn('Quickshell.env("SHELL_THEMES_ROOT")', theme_source)
+        self.assertIn('Quickshell.env("MOONARCH_THEMES_ROOT")', theme_source)
+        neutral = theme_source.index('Quickshell.env("SHELL_THEMES_ROOT")')
+        alias = theme_source.index('Quickshell.env("MOONARCH_THEMES_ROOT")')
+        self.assertLess(neutral, alias, "El nombre neutro debe preceder al alias de moonarch")
+        self.assertRegex(theme_source, r"readonly\s+property\s+string\s+settingsThemesRoot")
+        self.assertIn('"/.local/share/moonarch/themes"', theme_source)
+        shell_settings = json.loads(SHELL_JSON.read_text(encoding="utf-8"))
+        for key in ("themesRoot", "themeCommand"):
+            self.assertIn(key, shell_settings, f"shell.json debe declarar {key}")
+            value = shell_settings[key]
+            self.assertTrue(
+                value is None or isinstance(value, str),
+                f"{key} debe ser null (usa el default) o un string configurable",
+            )
+
+    def test_theme_mode_degrades_to_readonly_listing_without_provider(self) -> None:
+        """Sin comando de temas el modo Themes lista en lectura y explica que falta un proveedor (tarea 4.2)."""
+        source = LAUNCHER_QML.read_text(encoding="utf-8")
+        self.assertRegex(source, r"readonly\s+property\s+bool\s+themeCommandAvailable\b")
+        self.assertRegex(source, r"property\s+bool\s+themeListReadOnly\b")
+        load_body = re.search(r"function\s+loadThemes\s*\(\)\s*\{(.*?)\n    \}", source, re.DOTALL)
+        self.assertIsNotNone(load_body)
+        body = load_body.group(1)
+        self.assertRegex(body, r"themeListReadOnly\s*=\s*!root\.themeCommandAvailable")
+        self.assertRegex(body, r"themeListReadOnly\s*\?\s*")
+        self.assertIn("theme provider", body)
+        self.assertRegex(
+            source,
+            r"if\s*\(themeListReadOnly\)\s*return",
+            "El modo lectura no debe intentar aplicar temas",
+        )
+        # El orden del ternario es parte del contrato: sin este anclaje, un
+        # ternario invertido pasaria porque cada argv ya se assertea por
+        # separado en otro contrato.
+        ternary = re.search(
+            r"process\.exec\(\s*themeListReadOnly\s*\?\s*"
+            r"(?P<readonly_argv>\[[^\]]*\])\s*:\s*"
+            r"(?P<provider_argv>\[[^\]]*\])\s*\)",
+            body,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(
+            ternary,
+            "El exec del listado debe elegir el argv con el ternario themeListReadOnly",
+        )
+        self.assertIn(
+            '"find", Theme.themesRoot',
+            ternary.group("readonly_argv"),
+            "La rama verdadera del ternario debe ser el listado find sobre la "
+            "raiz resuelta Theme.themesRoot, no sobre una referencia no "
+            "declarada en el Launcher",
+        )
+        self.assertIn(
+            '[root.themeSelector, "--list"]',
+            ternary.group("provider_argv"),
+            "La rama falsa del ternario debe ser el --list del proveedor",
+        )
+        # El caso sin proveedor no puede quedar cargando: el handler de
+        # salida limpia themesLoading antes de ramificar por modo lectura.
+        exited_body = re.search(
+            r"function\s+themeListExited\s*\([^)]*\)\s*\{(.*?)\n    \}",
+            source,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(exited_body, "El handler themeListExited debe existir")
+        exited = exited_body.group(1)
+        reset = exited.index("themesLoading = false;")
+        guard = exited.index("themeListReadOnly")
+        self.assertLess(
+            reset,
+            guard,
+            "themeListExited debe limpiar themesLoading antes de cualquier "
+            "ramificacion por modo lectura; si no, el modo sin proveedor "
+            "se quedaria en themesLoading",
+        )
+
+    def test_reload_theme_reloads_all_three_theme_file_views(self) -> None:
+        """reloadTheme() debe recargar los tres FileView, incluido overrideView (regresión de D6, tarea 4.3)."""
+        theme_source = THEME_QML.read_text(encoding="utf-8")
+        body = re.search(r"function\s+reloadTheme\s*\(\)\s*\{(.*?)\n    \}", theme_source, re.DOTALL)
+        self.assertIsNotNone(body)
+        body_text = body.group(1)
+        for view in ("ghosttyView", "waybarView", "overrideView"):
+            self.assertIn(f"{view}.reload()", body_text, f"reloadTheme debe recargar {view}")
+
+    def test_parse_ghostty_supports_real_ghostty_palette_form(self) -> None:
+        """parseGhostty debe poblar p0..p15 con la forma real `palette = 5=#F5C2E7` (tarea 5.1).
+
+        Contrato estructural: no ejecuta el parser QML; la prueba de runtime es el probe
+        aislado (`qs -p /tmp/tsd-probe`). Solo verifica que la estructura del parser
+        reconozca el indice del palette a partir del valor, no solo de la clave.
+        """
+        theme_source = THEME_QML.read_text(encoding="utf-8")
+        body = re.search(
+            r"function\s+parseGhostty\s*\(\s*txt\s*\)\s*\{(.*?)\n        \}",
+            theme_source,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(body, "parseGhostty debe existir en Theme.qml")
+        parser = body.group(1)
+        # Forma real de ghostty: el primer split en "=" deja key="palette" y
+        # val="5=#F5C2E7"; el indice y el color viven en el valor.
+        self.assertRegex(
+            parser,
+            r"val\.match\([^)]*\\d\+[^)]*\)",
+            "parseGhostty debe reconocer el indice del palette a partir del valor "
+            "(val), no solo de la clave, para la forma `palette = 5=#F5C2E7`",
+        )
+        self.assertRegex(
+            parser,
+            r'key\s*===\s*"palette"',
+            "El reconocimiento por valor debe acotarse a la clave `palette` para no "
+            "alterar ninguna otra clave",
+        )
+        self.assertRegex(
+            parser,
+            r'map\["p"\s*\+',
+            "El palette detectado debe almacenarse como p0..p15",
+        )
+        # La forma legada `palette 5 = #RRGGBB` (indice en la clave) se conserva:
+        # eliminarla podria romper un bundle no verificado.
+        self.assertRegex(
+            parser,
+            r"key\.match\(\s*/\^palette\\s\+\(\\d\+\)\$/",
+            "La forma legada `palette N = #RRGGBB` sobre la clave debe conservarse",
+        )
+
+    def test_settings_file_view_uses_shelldir_not_configdir(self) -> None:
+        """El FileView de settings lee shell.json desde Quickshell.shellDir (tarea 5.2)."""
+        theme_source = THEME_QML.read_text(encoding="utf-8")
+        self.assertNotIn(
+            "Quickshell.configDir",
+            theme_source,
+            "Quickshell.configDir esta deprecado en Quickshell 0.3.1 y no debe quedar "
+            "en Theme.qml (ni en codigo ni en comentarios)",
+        )
+        self.assertRegex(
+            theme_source,
+            r"path:\s*`\$\{Quickshell\.shellDir\}/shell\.json`",
+            "El FileView de settings debe seguir leyendo shell.json desde la misma "
+            "ubicacion, ahora via Quickshell.shellDir",
         )
 
     def test_theme_loading_clears_stale_results_and_blocks_acceptance(self) -> None:

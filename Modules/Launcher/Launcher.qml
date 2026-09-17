@@ -37,7 +37,36 @@ PanelWindow {
     readonly property bool commandBusy: OperationState.isBusy(commandState)
     readonly property bool themeApplyBusy: OperationState.isBusy(themeApplyState)
     readonly property bool acceptanceBusy: commandBusy || themeApplyBusy || themesLoading
-    readonly property string themeSelector: Quickshell.env("HOME") + "/.local/bin/moonarch/theme-selector"
+
+    // Cadena de resolución de D3 (env neutro → alias moonarch → setting → default).
+    readonly property string themeSelector: Theme.pick(
+        Quickshell.env("SHELL_THEME_COMMAND"),
+        Quickshell.env("MOONARCH_THEME_COMMAND"),
+        Theme.settingsThemeCommand,
+        Theme.defaultThemeCommand
+    )
+
+    property bool themeListReadOnly: false
+    property bool themeCommandProbeFailed: false
+    readonly property bool themeCommandAvailable:
+        root.themeSelector !== "" && !root.themeCommandProbeFailed
+
+    // Sonda de existencia del comando (D4): si no existe, el modo Themes degrada
+    // a la lista en modo lectura en vez de quedar muerto.
+    FileView {
+        id: themeCommandProbe
+        path: root.themeSelector
+        watchChanges: false
+        printErrors: false
+        onLoaded: root.themeCommandProbeFailed = false
+        onLoadFailed: root.themeCommandProbeFailed = true
+        Component.onCompleted: reload()
+    }
+
+    Connections {
+        target: themeCommandProbe
+        function onPathChanged() { themeCommandProbe.reload(); }
+    }
     readonly property bool calcMode: searchInput.text.startsWith("=")
     readonly property string calcResult: ShellState.evalExpr(searchInput.text.slice(1))
     readonly property var modes: [
@@ -205,7 +234,10 @@ PanelWindow {
         results = [];
         themesLoading = true;
         clearStatus();
-        statusText = "Loading validated MoonArch themes…";
+        themeListReadOnly = !root.themeCommandAvailable;
+        statusText = themeListReadOnly
+            ? "Listing themes read-only: applying requires a theme provider"
+            : "Loading validated MoonArch themes…";
 
         const launch = OperationState.begin(themeLoadState);
         if (!launch.accepted) return;
@@ -227,7 +259,11 @@ PanelWindow {
         }
         themeListProcess = process;
         themeListStartupWatchdog.restart();
-        process.exec([themeSelector, "--list"]);
+        // Degradación D4: sin comando disponible, listar los directorios de
+        // la raíz resuelta en modo lectura con find, en vez de fallar.
+        process.exec(themeListReadOnly
+            ? ["find", Theme.themesRoot, "-mindepth", "1", "-maxdepth", "1", "-type", "d", "-printf", "%f\\n"]
+            : [root.themeSelector, "--list"]);
     }
 
     function runCommand() {
@@ -322,6 +358,7 @@ PanelWindow {
             close();
         } else if (mode === "themes") {
             if (themesLoading) return;
+            if (themeListReadOnly) return;
             applyTheme(item);
         }
     }
@@ -377,7 +414,8 @@ PanelWindow {
             subtitle: id,
             icon: "preferences-desktop-theme"
         }));
-        clearStatus();
+        // En modo lectura se conserva el mensaje que explica que falta el proveedor.
+        if (!root.themeListReadOnly) clearStatus();
         updateResults();
     }
 
@@ -496,6 +534,14 @@ PanelWindow {
             root.themeLoadState = timeout.state;
             root.themeListProcess = null;
             root.themesLoading = false;
+            if (!root.themeListReadOnly && !root.themeCommandAvailable) {
+                // La sonda ya confirmó que el comando no existe: degradar a la
+                // lista en modo lectura (D4) en vez de reportar un error opaco.
+                process.running = false;
+                process.destroy();
+                root.loadThemes();
+                return;
+            }
             root.reportProcessFailure(
                 process,
                 "Selene theme list failed",
