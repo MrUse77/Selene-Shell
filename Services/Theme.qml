@@ -43,8 +43,10 @@ Item {
     }
 
     // ---- Settings de la shell (shell.json en el directorio de config) ----
-    // Claves reconocidas: themesRoot y themeCommand. Un valor null o una clave
-    // ausente significa "usar el default"; un string no vacío lo configura.
+    // Claves reconocidas: themesRoot, themeCommand, workspacesPerMonitor y
+    // tempSensor. Un valor null o una clave ausente significa "usar el
+    // default"; un string no vacío (o un entero >= 1 para workspaces, según
+    // valide el consumidor) lo configura.
     property var _settings: null
 
     readonly property string settingsThemesRoot:
@@ -52,6 +54,20 @@ Item {
 
     readonly property string settingsThemeCommand:
         (typeof _settings?.themeCommand === "string" ? _settings.themeCommand : "")
+
+    // Cantidad de workspaces por monitor (la valida el consumidor). Se expone
+    // como string para pasar limpio por pick(), que solo acepta strings no
+    // vacíos; "" significa "usar el default".
+    readonly property string settingsWorkspacesPerMonitor:
+        (typeof _settings?.workspacesPerMonitor === "number"
+            ? String(_settings.workspacesPerMonitor)
+            : "")
+
+    // Nombre del sensor de temperatura (p.ej. "k10temp"); "" = autodetectar.
+    readonly property string settingsTempSensor:
+        (typeof _settings?.tempSensor === "string" && _settings.tempSensor !== ""
+            ? _settings.tempSensor
+            : "")
 
     readonly property string themesRoot: pick(
         Quickshell.env("SHELL_THEMES_ROOT"),
