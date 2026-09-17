@@ -26,7 +26,7 @@ Chain strategy: pending
 
 Estos prerrequisitos deben resolverse antes de cualquier apply con runtime bearing.
 
-- [x] **P0.1 — Git common directory confirmado.** `/home/agustin/Dev/Lab/QML/.git/HEAD` legible y `git status` funcional. Resuelto por contexto del orquestador antes del lanzamiento. **Status: RESOLVED.**
+- [x] **P0.1 — Git common directory confirmado.** el `.git/HEAD` del repo legible y `git status` funcional. Resuelto por contexto del orquestador antes del lanzamiento. **Status: RESOLVED.**
 - [x] **P0.2 — Test runner determinista confirmado.** El runner funcional es `/usr/lib/qt6/bin/qmltestrunner` (Qt 6.11.2); `/usr/bin/qmltestrunner` es Qt5 y no ejecuta estos tests. Comando determinista:
   ```
   QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -input tests/overlay-state -import . -o -,txt

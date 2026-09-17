@@ -32,7 +32,7 @@ El stack de shell actual de MoonArch está fragmentado (waybar + eww + dunst + r
 
 ## Impact
 
-- **Código nuevo** en `/home/agustin/Dev/Lab/QML/` (raíz del proyecto): ~30 archivos QML + README. Sin tocar otros árboles.
+- **Código nuevo** en la raíz del proyecto: ~30 archivos QML + README. Sin tocar otros árboles.
 - **Dependencia nueva**: `quickshell-git` (AUR) y symlink `~/.config/quickshell/selene -> ~/Dev/Lab/QML`.
 - **Runtime**: convive con waybar/dunst (se detienen solo para pruebas y se restauran); mientras dunst posea el bus de notificaciones, el módulo de notificaciones no puede registrar el servidor (el resto funciona).
 - **Futuro** (fuera de este change): incorporación a moonarch vía fragmento `quickshell.json` por bundle + alta en `required_files` + señal en `reload_consumers()`; ojo con `tests/moonarch-theme-palette_test.sh` que pinea por hash los archivos del bundle tokyo-night.

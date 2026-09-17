@@ -97,28 +97,43 @@ los mantengamos nosotros. Es el eje que **compone**; el multi-escritorio es el q
       Queda sin verificar en vivo el síntoma de D6 (ventana de paleta mezclada)
       porque necesita un bundle que empaquete `quickshell.json`: es el ítem de
       moonarch de abajo.
-- [ ] **CI**. No hay `.github/` en este repo: sin workflow, sin lint, sin tests en
-      cada push. Los contract tests existen y se corren a mano. Caelestia tiene
-      build, lint, format y release.
-- [ ] **Empaquetado propio**. Sin build system ni releases: hoy la única forma de
-      obtener Selene es el submódulo de MoonArch. Caelestia se instala solo (AUR,
-      Nix). Sin esto, "artefacto propio" queda a medias.
-- [ ] **Multi-monitor y hardware**: revisar qué asume Selene hoy del setup del
-      autor (dos monitores, sin batería) y convertirlo en default declarado.
+- [x] **CI** — implementado. `.github/workflows/ci.yml` corre cuatro jobs en cada
+      push a `main` y en cada PR: contratos Python, tests QML con `qmltestrunner`
+      headless (los tres suites son lógica pura: no necesitan compositor), lint de
+      QML/JS con `qmllint` y validación de los propios workflows con actionlint.
+      El gate de lint falla ante `missing-property`, no solo ante errores: esa
+      categoría es la que dejó pasar un `Theme.settings` inexistente que rompía en
+      silencio la lectura de `shell.json`. Quedan afuera el formateo automático
+      (`qmlformat`) y el release, que dependen de que exista algo que empaquetar.
+- [ ] **Empaquetado propio** (#14). Sin build system ni releases: hoy la única
+      forma de obtener Selene es el submódulo de MoonArch. Caelestia se instala
+      solo (AUR, Nix). Sin esto, "artefacto propio" queda a medias.
+- [ ] **Multi-monitor y hardware** — **en curso**. Un relevamiento de supuestos de
+      máquina encontró varios que degradan según el hardware, y los tres que
+      fallaban en silencio ya están resueltos: la temperatura leía el primer
+      `hwmon` del sistema (en este equipo, la del NVMe en vez de la del CPU) y
+      ahora se autodetecta por nombre de sensor y es declarable; los workspaces por
+      monitor dejaron de ser un 5 fijo; y un chequeo de updates imposible ya no se
+      confunde con "estás al día".
+      Los estados quedaron expuestos para diagnóstico, pero **ningún widget los
+      consume todavía**. Falta: geometría y márgenes (#8), comandos de herramientas
+      (#9), identidad y locale (#10) y la UI que haga visibles esos estados (#11).
 
 ### Del otro lado (MoonArch), para que el contrato cierre
 
-- [ ] **Empaquetar `quickshell.json` en los 13 bundles** — el fragmento dedicado
-      que Selene ya sabe leer con prioridad total. Hoy no existe en ningún bundle,
-      así que el hook está dormido y el último síntoma de D6 (hasta 1 s de paleta
-      mezclada al re-temar) todavía no se puede observar en vivo.
+- [ ] **Empaquetar `quickshell.json` en los 13 bundles** (MoonArch#139) — el
+      fragmento dedicado que Selene ya sabe leer con prioridad total. Hoy no existe
+      en ningún bundle, así que el hook está dormido y el último síntoma de D6
+      (hasta 1 s de paleta mezclada al re-temar) todavía no se puede observar en
+      vivo.
 - [ ] **Arreglar la rama de reload de Waybar** en `theme-selector`
-      (`pgrep -x waybar` / `pkill -SIGUSR2 waybar`): es un rastro del stack
-      retirado, y sacarlo necesita delta del spec de `moonarch-theme-selector`.
-      El mismo script ya llama `qs -c selene ipc call selene themeReload` al aplicar,
-      que es el camino por el que Selene converge al instante.
-- [ ] **Borrar `cli/pkg/installer/packages.go`** — lista muerta con waybar, wofi,
-      dunst, `aur/eww` y `aur/wlogout`, con cero callers.
+      (MoonArch#140) (`pgrep -x waybar` / `pkill -SIGUSR2 waybar`): es un rastro
+      del stack retirado, y sacarlo necesita delta del spec de
+      `moonarch-theme-selector`. El mismo script ya llama
+      `qs -c selene ipc call selene themeReload` al aplicar, que es el camino por
+      el que Selene converge al instante.
+- [ ] **Borrar `cli/pkg/installer/packages.go`** (MoonArch#141) — lista muerta con
+      waybar, wofi, dunst, `aur/eww` y `aur/wlogout`, con cero callers.
 
 ## Línea de deprecación
 
