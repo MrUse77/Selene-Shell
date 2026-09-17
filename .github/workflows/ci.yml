@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  python-contracts:
+    name: Python contract tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run contract tests
+        run: python3 -m unittest discover -s tests -v
+      - name: Byte-compile Python helpers
+        run: python3 -m py_compile $(find . -name '*.py' -not -path './.git/*')
+
+  qml-tests:
+    name: QML tests (qmltestrunner)
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - name: Install toolchain
+        run: |
+          pacman -Sy --noconfirm archlinux-keyring
+          pacman -Syu --noconfirm --needed git quickshell
+      - uses: actions/checkout@v4
+      - name: Run QML tests
+        run: |
+          export QT_QPA_PLATFORM=offscreen
+          failed=0
+          for t in tests/*/tst_*.qml; do
+            echo "== $t"
+            /usr/lib/qt6/bin/qmltestrunner -input "$t" || failed=1
+          done
+          exit $failed
+
+  qml-lint:
+    name: QML/JS lint (qmllint)
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - name: Install toolchain
+        run: |
+          pacman -Sy --noconfirm archlinux-keyring
+          pacman -Syu --noconfirm --needed git quickshell
+      - uses: actions/checkout@v4
+      - name: Lint QML and JS sources
+        run: |
+          files=$(find . \( -name '*.qml' -o -name '*.js' \) \
+            -not -path './.git/*' -not -path './.atl/*' -not -path './.zcode/*')
+          /usr/lib/qt6/bin/qmllint $files
+
+  workflow-validation:
+    name: Workflow validation (actionlint)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download actionlint
+        run: |
+          curl -sSL -o actionlint.tar.gz \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
+          tar xzf actionlint.tar.gz actionlint
+      - name: Validate workflows
+        run: ./actionlint -color
