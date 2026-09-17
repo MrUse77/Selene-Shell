@@ -322,6 +322,50 @@ class SeleneCorrectionContracts(unittest.TestCase):
         self.assertIn("onExited:", source)
         self.assertIn("stderr", source)
 
+    def test_ci_lint_gate_fails_on_missing_property(self) -> None:
+        """El job de lint del CI debe fallar por la categoría missing-property.
+
+        Regresión: qmllint reporta `member not found on type` como warning y el
+        job solo fallaba por código de salida, así que un `Theme.settings`
+        inexistente rompía la lectura de shell.json en silencio. El gate debe
+        pasar `--missing-property error` manteniendo el file list existente.
+        """
+        source = (PROJECT_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+        self.assertRegex(
+            source,
+            r"/usr/lib/qt6/bin/qmllint\s+--missing-property\s+error\s+\"\$\{files\[@\]\}\"",
+            "El step de lint debe invocar qmllint con --missing-property error sobre "
+            "el file list recolectado (${files[@]})",
+        )
+
+    def test_theme_internal_tokens_are_typed_not_plain_qtobject(self) -> None:
+        """El portador interno de tokens `_t` debe estar tipado, no como QtObject.
+
+        Regresión: `readonly property QtObject _t: QtObject { ... }` hacía que
+        qmllint tipara `_t` como QObject y no viera los 13 miembros: 26 warnings
+        missing-property y cualquier typo en un token pasaba en silencio. El
+        tipo debe ser un inline component (ThemeTokens) con las propiedades
+        declaradas.
+        """
+        source = THEME_QML.read_text(encoding="utf-8")
+        self.assertNotRegex(
+            source,
+            r"readonly\s+property\s+QtObject\s+_t\s*:",
+            "_t no puede declararse como QtObject genérico: qmllint no ve sus "
+            "miembros y cada acceso es un missing-property",
+        )
+        self.assertRegex(
+            source,
+            r"component\s+ThemeTokens\s*:\s*QtObject\s*\{",
+            "Theme.qml debe declarar el inline component ThemeTokens con los "
+            "tokens tipados",
+        )
+        self.assertRegex(
+            source,
+            r"readonly\s+property\s+ThemeTokens\s+_t\s*:\s*ThemeTokens\s*\{",
+            "_t debe tiparse con el inline component ThemeTokens",
+        )
+
     def test_process_acceptance_has_busy_guards_identity_and_startup_watchdogs(self) -> None:
         launcher = LAUNCHER_QML.read_text(encoding="utf-8")
         power = POWER_MENU_QML.read_text(encoding="utf-8")

@@ -128,20 +128,41 @@ Item {
     readonly property int rInner: 10
 
     // Estado interno derivado (recreado al re-parsear)
-    readonly property QtObject _t: QtObject {
-        property string bg: "#1a1b26"
-        property string bgDeep: "#11111b"
-        property string surface: "#24283b"
-        property string surfaceBright: "#2b2f45"
-        property string text: "#c0caf5"
-        property string textDim: "#565f89"
-        property string accent: "#7aa2f7"
-        property string urgent: "#f7768e"
-        property string success: "#9ece6a"
-        property string warning: "#e0af68"
-        property string purple: "#bb9af7"
-        property string cyan: "#7dcfff"
-        property string gray: "#414868"
+    // Tokens internos de la paleta. Se declaran como inline component para que
+    // el linter vea los miembros: tipando `_t` con QtObject genérico, cada acceso
+    // `_t.bg` era un warning missing-property (y un typo real pasaría en silencio,
+    // como ya pasó con Theme.settings). Los valores embebidos son el fallback
+    // Tokyo Night de arranque; applyTheme() los sobrescribe al derivar.
+    component ThemeTokens: QtObject {
+        property string bg
+        property string bgDeep
+        property string surface
+        property string surfaceBright
+        property string text
+        property string textDim
+        property string accent
+        property string urgent
+        property string success
+        property string warning
+        property string purple
+        property string cyan
+        property string gray
+    }
+
+    readonly property ThemeTokens _t: ThemeTokens {
+        bg: "#1a1b26"
+        bgDeep: "#11111b"
+        surface: "#24283b"
+        surfaceBright: "#2b2f45"
+        text: "#c0caf5"
+        textDim: "#565f89"
+        accent: "#7aa2f7"
+        urgent: "#f7768e"
+        success: "#9ece6a"
+        warning: "#e0af68"
+        purple: "#bb9af7"
+        cyan: "#7dcfff"
+        gray: "#414868"
     }
 
     property string _lastGhostty: ""
