@@ -58,7 +58,7 @@ jobs:
         run: |
           mapfile -t files < <(find . \( -name '*.qml' -o -name '*.js' \) \
             -not -path './.git/*' -not -path './.atl/*' -not -path './.zcode/*')
-          /usr/lib/qt6/bin/qmllint "${files[@]}"
+          /usr/lib/qt6/bin/qmllint --missing-property error "${files[@]}"
 
   workflow-validation:
     name: Workflow validation (actionlint)

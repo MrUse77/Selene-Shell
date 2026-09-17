@@ -261,9 +261,14 @@ PanelWindow {
         themeListStartupWatchdog.restart();
         // Degradación D4: sin comando disponible, listar los directorios de
         // la raíz resuelta en modo lectura con find, en vez de fallar.
+        // El tipado de qmllint sobre el retorno de createObject() es QObject y
+        // marca exec como missing-property; es un falso positivo: el objeto
+        // creado ES un Process (Quickshell.Io.Process) y expone exec().
+        // qmllint disable missing-property
         process.exec(themeListReadOnly
             ? ["find", Theme.themesRoot, "-mindepth", "1", "-maxdepth", "1", "-type", "d", "-printf", "%f\\n"]
             : [root.themeSelector, "--list"]);
+        // qmllint enable missing-property
     }
 
     function runCommand() {
@@ -295,7 +300,12 @@ PanelWindow {
         }
         commandProcess = process;
         commandStartupWatchdog.restart();
+        // El tipado de qmllint sobre el retorno de createObject() es QObject y
+        // marca exec como missing-property; es un falso positivo: el objeto
+        // creado ES un Process (Quickshell.Io.Process) y expone exec().
+        // qmllint disable missing-property
         process.exec(parsed.args);
+        // qmllint enable missing-property
     }
 
     function applyTheme(item) {
@@ -320,7 +330,12 @@ PanelWindow {
         }
         themeApplyProcess = process;
         themeApplyStartupWatchdog.restart();
+        // El tipado de qmllint sobre el retorno de createObject() es QObject y
+        // marca exec como missing-property; es un falso positivo: el objeto
+        // creado ES un Process (Quickshell.Io.Process) y expone exec().
+        // qmllint disable missing-property
         process.exec([themeSelector, "--apply", item.themeId]);
+        // qmllint enable missing-property
     }
 
     function accept() {

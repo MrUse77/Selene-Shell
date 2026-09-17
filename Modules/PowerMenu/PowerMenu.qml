@@ -121,7 +121,12 @@ PanelWindow {
         }
         actionProcess = process;
         actionStartupWatchdog.restart();
+        // El tipado de qmllint sobre el retorno de createObject() es QObject y
+        // marca exec como missing-property; es un falso positivo: el objeto
+        // creado ES un Process (Quickshell.Io.Process) y expone exec().
+        // qmllint disable missing-property
         process.exec(action.cmd);
+        // qmllint enable missing-property
     }
 
     function actionStarted(process) {
