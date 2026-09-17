@@ -1,4 +1,5 @@
 singleton Anim Anim.qml
+singleton Settings Settings.qml
 singleton Theme Theme.qml
 singleton Moon Moon.qml
 singleton Hardware Hardware.qml
