@@ -34,6 +34,8 @@ class BatteryContracts(unittest.TestCase):
     def test_battery_service_is_the_sole_upower_import(self) -> None:
         offenders = []
         for path in PROJECT_ROOT.rglob("*"):
+            if ".git" in path.parts:
+                continue
             if path.suffix not in {".qml", ".js"}:
                 continue
             if "Quickshell.Services.UPower" in path.read_text(encoding="utf-8"):

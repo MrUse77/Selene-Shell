@@ -26,6 +26,7 @@ POWER_MENU_QML = PROJECT_ROOT / "Modules" / "PowerMenu" / "PowerMenu.qml"
 LAUNCHER_LOGIC_JS = PROJECT_ROOT / "Services" / "LauncherLogic.js"
 OPERATION_STATE_JS = PROJECT_ROOT / "Services" / "OperationState.js"
 THEME_QML = PROJECT_ROOT / "Services" / "Theme.qml"
+SETTINGS_QML = PROJECT_ROOT / "Services" / "Settings.qml"
 WORKSPACES_QML = PROJECT_ROOT / "Modules" / "Bar" / "Workspaces.qml"
 HARDWARE_QML = PROJECT_ROOT / "Services" / "Hardware.qml"
 UPDATES_QML = PROJECT_ROOT / "Services" / "Updates.qml"
@@ -617,20 +618,49 @@ class SeleneCorrectionContracts(unittest.TestCase):
             "La forma legada `palette N = #RRGGBB` sobre la clave debe conservarse",
         )
 
-    def test_settings_file_view_uses_shelldir_not_configdir(self) -> None:
-        """El FileView de settings lee shell.json desde Quickshell.shellDir (tarea 5.2)."""
-        theme_source = THEME_QML.read_text(encoding="utf-8")
+    def test_settings_service_reads_shell_json_from_shelldir(self) -> None:
+        """La lectura de shell.json vive en Settings.qml y usa Quickshell.shellDir (tarea 5.2)."""
+        settings_source = SETTINGS_QML.read_text(encoding="utf-8")
         self.assertNotIn(
             "Quickshell.configDir",
-            theme_source,
+            settings_source,
             "Quickshell.configDir esta deprecado en Quickshell 0.3.1 y no debe quedar "
-            "en Theme.qml (ni en codigo ni en comentarios)",
+            "en Settings.qml (ni en codigo ni en comentarios)",
         )
         self.assertRegex(
-            theme_source,
+            settings_source,
             r"path:\s*`\$\{Quickshell\.shellDir\}/shell\.json`",
-            "El FileView de settings debe seguir leyendo shell.json desde la misma "
+            "La lectura de settings debe seguir leyendo shell.json desde la misma "
             "ubicacion, ahora via Quickshell.shellDir",
+        )
+        qmldir = (PROJECT_ROOT / "Services" / "qmldir").read_text(encoding="utf-8")
+        self.assertRegex(
+            qmldir,
+            r"singleton\s+Settings\s+Settings\.qml",
+            "Services/qmldir debe registrar el singleton Settings",
+        )
+
+    def test_shell_json_reader_is_not_duplicated(self) -> None:
+        """Solo Services/Settings.qml puede apuntar una lectura a shell.json.
+
+        El lector se extrajo a un servicio justamente para que cada modulo no
+        repita el FileView ni el parseo (issue #13). Si otro modulo vuelve a
+        leer el archivo, la validacion y la tolerancia a JSON invalido se
+        bifurcan en dos implementaciones.
+        """
+        offenders = []
+        for path in sorted(PROJECT_ROOT.rglob("*.qml")):
+            if ".git" in path.parts:
+                continue
+            if path.parent.name == "Services" and path.name == "Settings.qml":
+                continue
+            if re.search(r"path:\s*[^\n]*(?<!quick)shell\.json", path.read_text(encoding="utf-8")):
+                offenders.append(str(path.relative_to(PROJECT_ROOT)))
+        self.assertEqual(
+            offenders,
+            [],
+            "El lector de shell.json debe ser unico (Services/Settings.qml); "
+            "tambien lo leen: " + ", ".join(offenders),
         )
 
     def test_theme_loading_clears_stale_results_and_blocks_acceptance(self) -> None:

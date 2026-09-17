@@ -42,32 +42,25 @@ Item {
         return arguments[arguments.length - 1];
     }
 
-    // ---- Settings de la shell (shell.json en el directorio de config) ----
-    // Claves reconocidas: themesRoot, themeCommand, workspacesPerMonitor y
-    // tempSensor. Un valor null o una clave ausente significa "usar el
-    // default"; un string no vacío (o un entero >= 1 para workspaces, según
-    // valide el consumidor) lo configura.
-    property var _settings: null
+    // ---- Settings de la shell (shell.json) ----
+    // La lectura y el parseo del archivo viven en Services/Settings.qml; acá
+    // solo se declaran las claves que la shell conoce y su tipo. Un valor
+    // ausente o del tipo equivocado significa "usar el default". Claves
+    // reconocidas: themesRoot, themeCommand, workspacesPerMonitor y tempSensor.
+    readonly property string settingsThemesRoot: Settings.str("themesRoot")
 
-    readonly property string settingsThemesRoot:
-        (typeof _settings?.themesRoot === "string" ? _settings.themesRoot : "")
-
-    readonly property string settingsThemeCommand:
-        (typeof _settings?.themeCommand === "string" ? _settings.themeCommand : "")
+    readonly property string settingsThemeCommand: Settings.str("themeCommand")
 
     // Cantidad de workspaces por monitor (la valida el consumidor). Se expone
     // como string para pasar limpio por pick(), que solo acepta strings no
     // vacíos; "" significa "usar el default".
-    readonly property string settingsWorkspacesPerMonitor:
-        (typeof _settings?.workspacesPerMonitor === "number"
-            ? String(_settings.workspacesPerMonitor)
-            : "")
+    readonly property string settingsWorkspacesPerMonitor: {
+        const n = Settings.num("workspacesPerMonitor", undefined);
+        return typeof n === "number" ? String(n) : "";
+    }
 
     // Nombre del sensor de temperatura (p.ej. "k10temp"); "" = autodetectar.
-    readonly property string settingsTempSensor:
-        (typeof _settings?.tempSensor === "string" && _settings.tempSensor !== ""
-            ? _settings.tempSensor
-            : "")
+    readonly property string settingsTempSensor: Settings.str("tempSensor")
 
     readonly property string themesRoot: pick(
         Quickshell.env("SHELL_THEMES_ROOT"),
@@ -79,29 +72,6 @@ Item {
     // Default del comando de temas (D1); la cadena completa vive en Launcher.qml.
     readonly property string defaultThemeCommand:
         Quickshell.env("HOME") + "/.local/bin/moonarch/theme-selector"
-
-    function _loadSettings(txt) {
-        if (!txt) {
-            _settings = null;
-            return;
-        }
-        try {
-            const parsed = JSON.parse(txt);
-            _settings = (parsed && typeof parsed === "object" && !Array.isArray(parsed)) ? parsed : null;
-        } catch (e) {
-            _settings = null;
-        }
-    }
-
-    FileView {
-        id: settingsView
-        path: `${Quickshell.shellDir}/shell.json`
-        watchChanges: true
-        printErrors: false
-        onLoaded: root._loadSettings(text())
-        onLoadFailed: root._loadSettings("")
-        Component.onCompleted: reload()
-    }
 
     // ---- Tokens derivados (hex strings; usar Theme.alpha() para alphas) ----
     readonly property string bg: _t.bg
