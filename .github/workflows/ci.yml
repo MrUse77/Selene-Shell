@@ -10,12 +10,19 @@ jobs:
   python-contracts:
     name: Python contract tests
     runs-on: ubuntu-latest
+    container: archlinux:latest
     steps:
+      - name: Install toolchain
+        run: |
+          pacman -Sy --noconfirm archlinux-keyring
+          pacman -Syu --noconfirm --needed git python quickshell
       - uses: actions/checkout@v4
       - name: Run contract tests
         run: python3 -m unittest discover -s tests -v
       - name: Byte-compile Python helpers
-        run: python3 -m py_compile $(find . -name '*.py' -not -path './.git/*')
+        run: |
+          mapfile -t py_files < <(find . -name '*.py' -not -path './.git/*')
+          python3 -m py_compile "${py_files[@]}"
 
   qml-tests:
     name: QML tests (qmltestrunner)
@@ -49,9 +56,9 @@ jobs:
       - uses: actions/checkout@v4
       - name: Lint QML and JS sources
         run: |
-          files=$(find . \( -name '*.qml' -o -name '*.js' \) \
+          mapfile -t files < <(find . \( -name '*.qml' -o -name '*.js' \) \
             -not -path './.git/*' -not -path './.atl/*' -not -path './.zcode/*')
-          /usr/lib/qt6/bin/qmllint $files
+          /usr/lib/qt6/bin/qmllint "${files[@]}"
 
   workflow-validation:
     name: Workflow validation (actionlint)
