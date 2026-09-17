@@ -2,7 +2,7 @@ schema: spec-driven
 
 context: |
   Project: Selene — la shell de MoonArch (Quickshell/QML)
-  Root path: /home/agustin/Dev/Lab/QML
+  Root path: el checkout local de este repositorio
 
   Stack overview:
     - Runtime: Quickshell (quickshell-git del AUR), configs en QML/QtQuick

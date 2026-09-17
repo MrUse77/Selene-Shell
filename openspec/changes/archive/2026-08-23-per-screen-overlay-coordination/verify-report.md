@@ -25,7 +25,7 @@ The prior Strict TDD evidence blocker is resolved. All 41 implementation tasks a
 | Field | Finding |
 |---|---|
 | Native status | `nextRecommended: verify`; verification ready; 41/41 tasks complete |
-| Action context | Authorized root: `/home/agustin/Dev/Lab/QML`; verification made no production edits |
+| Action context | Authorized root: la raíz del repo; verification made no production edits |
 | Artifact store | OpenSpec (authoritative) |
 | Strict TDD | Active |
 | Scope ownership | All inspected implementation paths are inside the authorized workspace |
