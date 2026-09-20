@@ -7,6 +7,7 @@ import unittest
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+SHELL_QML = PROJECT_ROOT / "shell.qml"
 MEDIA_QML = PROJECT_ROOT / "Services" / "Media.qml"
 MEDIA_LOGIC_JS = PROJECT_ROOT / "Services" / "MediaLogic.js"
 SERVICES_QMLDIR = PROJECT_ROOT / "Services" / "qmldir"
@@ -83,6 +84,62 @@ class MediaContracts(unittest.TestCase):
         self.assertIn("Media.selectNextPlayer()", source)
         self.assertIn("Media.canSeek", source)
         self.assertIn("StyledSlider", source)
+
+    def test_ipc_handler_exposes_media_transport_functions(self) -> None:
+        source = self.read_required(SHELL_QML)
+        opened = re.search(r"IpcHandler\s*\{\s*target\s*:\s*\"selene\"", source)
+        self.assertIsNotNone(
+            opened,
+            "shell.qml must declare an IpcHandler whose target is \"selene\"",
+        )
+
+        # Isolate the IpcHandler block by brace counting from its opening brace.
+        # The scan stops at the first depth-0 brace, so it trusts the file to be
+        # balanced: a missing inner brace would be absorbed by an outer one and
+        # silently widen the boundary to the rest of the file. qmllint owns real
+        # syntax errors; this precondition keeps the scanner's assumption honest
+        # instead of relying on a guard that can never fire.
+        self.assertEqual(
+            source.count("{"),
+            source.count("}"),
+            "shell.qml must be brace-balanced for the IpcHandler scan to be sound",
+        )
+        depth = 1
+        block_end = None
+        for index in range(opened.end(), len(source)):
+            if source[index] == "{":
+                depth += 1
+            elif source[index] == "}":
+                depth -= 1
+                if depth == 0:
+                    block_end = index
+                    break
+        self.assertIsNotNone(
+            block_end,
+            "unbalanced braces around the IpcHandler block in shell.qml",
+        )
+        block = source[opened.end():block_end]
+
+        expected_delegates = {
+            "mediaPlayPause": "Media.togglePlaying()",
+            "mediaNext": "Media.next()",
+            "mediaPrev": "Media.previous()",
+        }
+        for function, call in expected_delegates.items():
+            declaration = re.search(
+                rf"function\s+{function}\s*\(\s*\)\s*\{{([^}}]*)\}}",
+                block,
+            )
+            self.assertIsNotNone(
+                declaration,
+                f"IpcHandler(target \"selene\") must declare {function}() "
+                "with an empty parameter list",
+            )
+            self.assertRegex(
+                declaration.group(1),
+                rf"\b{re.escape(call)}",
+                f"{function}() must delegate to {call} inside the IpcHandler block",
+            )
 
     def test_dashboard_artwork_accepts_any_nonempty_url_and_falls_back_on_error(self) -> None:
         source = self.read_required(DASHBOARD_QML)
