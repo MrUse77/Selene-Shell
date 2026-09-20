@@ -73,5 +73,8 @@ ShellRoot {
             ShellState.toggleHistory(Hyprland.focusedMonitor?.name ?? "")
         }
         function calc(expr: string): string { return ShellState.evalExpr(expr) }
+        function mediaPlayPause() { Media.togglePlaying() }
+        function mediaNext() { Media.next() }
+        function mediaPrev() { Media.previous() }
     }
 }
