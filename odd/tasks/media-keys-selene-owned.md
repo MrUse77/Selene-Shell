@@ -109,10 +109,19 @@ capacidad.
       Reemplazado por una precondición de balance de llaves sobre `shell.qml`, más
       el `assertIsNotNone` como guarda secundaria. La mutación ahora falla con
       `shell.qml must be brace-balanced for the IpcHandler scan to be sound`.
-- [ ] **T4 — Commit de unidad de trabajo.** Rama `feat/media-keys-ipc`. Incluye
+- [x] **T4 — Commit de unidad de trabajo.** Rama `feat/media-keys-ipc`. Incluye
       `shell.qml`, `tests/test_media_contracts.py` y este documento: `odd/` no está
       en `.gitignore`, así que el doc del change entra en el commit en vez de quedar
-      untracked para siempre. Evidencia: hash.
+      untracked para siempre. Evidencia: `4997de0`, autor `MrUse77
+      <agusdor14@hotmail.com>` — se usó `-c user.name=MrUse77` para no heredar el
+      `user.name` roto del config del repo — 3 archivos, 256 inserciones.
+      Review nativo: **declined para este candidato**. El host resolvió el consent
+      con `lineage_created: false` y `mutation_performed: false`, así que no hay
+      lineage y no corresponde STATUS ni ADVANCE ni reintentar START. Es un decline
+      candidate-scoped, no el kill switch. `ASSESS` devuelve `risk: high` con
+      `writerSelfVerification: true` + `independentVerifier: true`: el escritor
+      auto-verifica (rojo/verde observado) y un verificador independiente corre
+      siempre (dos corridas de `gentle-ai-verify` con chequeo de mutación).
 - [ ] **T5 — BLOQUEADO (MoonArch).** Reemplazar los cuatro binds de transporte en
       `home/.config/hypr/hyprland.lua:465-469` de `~/Dev/dotfiles` por
       `qs -c selene ipc call selene mediaPlayPause|mediaNext|mediaPrev`, preservar
@@ -129,6 +138,17 @@ capacidad.
   del usuario, no automática, y sujeta a que `dotfiles` se destrabe.
 - El ROADMAP no registra este cambio. Si el trabajo se vuelve visible para terceros,
   conviene una entrada en "De este lado (Selene)".
+- **Señal de riesgo falsa sobre `tests/test_media_contracts.py`.** El review marcó
+  `risk: high` con la evidencia "code that starts other processes in
+  tests/test_media_contracts.py" (`reason_code: process_boundary`, `signal:
+  shell_process`), y ese archivo importa solo `pathlib`, `re` y `unittest`: no hay
+  `subprocess`, `Popen`, `os.system` ni `check_*` en ninguna parte. La correlación
+  más fuerte es el vocabulario `shell` que introdujo el diff — 2 ocurrencias antes
+  (ambas dentro de `Quickshell.Services.Mpris`), 14 después — y en particular la
+  variable local `shell`, que además rompe el estilo del archivo (los otros tres
+  tests usan `source = self.read_required(...)`). No se puede probar el disparador
+  exacto sin re-correr el clasificador sobre una variante. Importa porque esa
+  evidencia es la que vio el humano en el prompt de consentimiento.
 - **Identidad git rota en este clone, preexistente.** `.git/config` tiene
   `user.name = user.email` desde el 16 sep 08:25, así que cinco commits ya salieron
   con autor `user.email <agusdor14@hotmail.com>` (`9a04360`, `402c0b1`, `1808a31`,
