@@ -185,11 +185,24 @@ asumir el layout)*.
       era el borde de una ventana del fondo, no la cápsula; la firma de color lo
       desambigua. Al terminar: 0 instancias del probe y PID 1908 vivo (uptime intacto).
 
-- [ ] **T5 — Spec y roadmap.**
-      `openspec/specs/bar/spec.md`: requirement de geometría declarada con la cadena y
-      el default que reproduce el layout previo. `ROADMAP.md`: registrar que #8 quedó
-      partido y que la barra es la primera mitad. Gates en verde.
-      Evidencia: _(pendiente)_
+- [x] **T5 — Roadmap, y spec canónico fuera de alcance (decisión).** `ROADMAP.md`
+      registra que #8 quedó partido, qué entrega la barra (claves y cadena) y qué
+      queda pendiente (overlays y popups encadenados a la altura de barra).
+      **`openspec/specs/bar/spec.md` no se toca.** Precedente de la casa: el cambio
+      de teclas de media documenta el contrato en su doc de ODD y deja el spec formal
+      "a un `changes/` propio si el equipo lo quiere"; `openspec/config.yaml` declara
+      `schema: spec-driven`, y esta rama no es un change de OpenSpec. Además el spec
+      canónico de bar ya está desactualizado por su cuenta: afirma "5 por monitor"
+      fijo (lo refuta el cambio de `workspacesPerMonitor`) y que los overlays flotan
+      "SIN zona exclusiva" (la barra es la única superficie con zona exclusiva, y
+      ahora se deriva de su alto). Escribir el requirement sin pasar por el ritual de
+      change+sync dejaría el mismo spec viejo con una sección nueva: queda como
+      decisión del usuario, registrada en los follow-ups.
+      Evidencia: los gates no dependen de docs (ningún test lee `openspec/`, verificado
+      con `grep -rn openspec tests/*.py .github/workflows/ci.yml` sin resultados); el
+      párrafo nuevo del roadmap reemplaza el "Falta: geometría y márgenes (#8)" y
+      sobrevive la corrida completa: python `81 tests / OK`, 4 suites QML 0 fallados,
+      `qmllint` exit 0.
 
 ## Segunda mitad (rama aparte, no es tarea de acá)
 
@@ -204,6 +217,17 @@ asumir el layout)*.
 
 ## Follow-ups registrados (no son tareas de este cambio)
 
+- **El requirement formal de la geometría no existe en el spec canónico.** Decisión
+  tomada acá: no editar `openspec/specs/bar/spec.md` a mano, porque
+  `openspec/config.yaml` declara `schema: spec-driven` y este trabajo no pasó por un
+  change. Queda para el usuario decidir si abre un `changes/` con el requirement de
+  geometría declarada (texto propuesto en la conversación de esta sesión) o si el
+  spec se edita directo.
+- **El spec canónico de bar está desactualizado, independiente de este cambio.**
+  `openspec/specs/bar/spec.md:18` dice "5 por monitor" fijo, cuando ese valor es
+  declarable desde el cambio de `workspacesPerMonitor`; y el *Purpose* afirma que los
+  overlays flotan "SIN zona exclusiva", cierto para los overlays pero no para la
+  barra, que es la única superficie con zona exclusiva (ahora derivada de su alto).
 - **H6 — La cadena viva no está cubierta por CI.** Todo lo que corre en el pipeline son
   contratos de texto sobre el código fuente más la suite QML sobre el `.js` puro; ningún
   test instancia el singleton `Geometry`, `Theme.pick` ni la precedencia real entre env y
