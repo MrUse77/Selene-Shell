@@ -86,8 +86,8 @@ class MediaContracts(unittest.TestCase):
         self.assertIn("StyledSlider", source)
 
     def test_ipc_handler_exposes_media_transport_functions(self) -> None:
-        shell = self.read_required(SHELL_QML)
-        opened = re.search(r"IpcHandler\s*\{\s*target\s*:\s*\"selene\"", shell)
+        source = self.read_required(SHELL_QML)
+        opened = re.search(r"IpcHandler\s*\{\s*target\s*:\s*\"selene\"", source)
         self.assertIsNotNone(
             opened,
             "shell.qml must declare an IpcHandler whose target is \"selene\"",
@@ -100,16 +100,16 @@ class MediaContracts(unittest.TestCase):
         # syntax errors; this precondition keeps the scanner's assumption honest
         # instead of relying on a guard that can never fire.
         self.assertEqual(
-            shell.count("{"),
-            shell.count("}"),
+            source.count("{"),
+            source.count("}"),
             "shell.qml must be brace-balanced for the IpcHandler scan to be sound",
         )
         depth = 1
         block_end = None
-        for index in range(opened.end(), len(shell)):
-            if shell[index] == "{":
+        for index in range(opened.end(), len(source)):
+            if source[index] == "{":
                 depth += 1
-            elif shell[index] == "}":
+            elif source[index] == "}":
                 depth -= 1
                 if depth == 0:
                     block_end = index
@@ -118,7 +118,7 @@ class MediaContracts(unittest.TestCase):
             block_end,
             "unbalanced braces around the IpcHandler block in shell.qml",
         )
-        block = shell[opened.end():block_end]
+        block = source[opened.end():block_end]
 
         expected_delegates = {
             "mediaPlayPause": "Media.togglePlaying()",
