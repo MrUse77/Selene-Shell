@@ -122,13 +122,24 @@ capacidad.
       `writerSelfVerification: true` + `independentVerifier: true`: el escritor
       auto-verifica (rojo/verde observado) y un verificador independiente corre
       siempre (dos corridas de `gentle-ai-verify` con chequeo de mutación).
-- [ ] **T5 — BLOQUEADO (MoonArch).** Reemplazar los cuatro binds de transporte en
-      `home/.config/hypr/hyprland.lua:465-469` de `~/Dev/dotfiles` por
-      `qs -c selene ipc call selene mediaPlayPause|mediaNext|mediaPrev`, preservar
+- [ ] **T5 — BLOQUEADO (MoonArch).** Registrado como **MoonArch#160**:
+      <https://github.com/MrUse77/MoonArch/issues/160>. Reemplazar los cuatro binds
+      de transporte en `home/.config/hypr/hyprland.lua:465-469` de `~/Dev/dotfiles`
+      por `qs -c selene ipc call selene mediaPlayPause|mediaNext|mediaPrev`, preservar
       `locked = true`, y bumpear el submódulo. `XF86AudioPlay` y `XF86AudioPause`
       mapean ambos a `play-pause`, así que los dos van a `mediaPlayPause`: cuatro
       binds, tres funciones. **No se toca**: decisión explícita del usuario en la
       sesión del 2026-09-19 (hay una sesión RDD activa en `dotfiles`).
+      Orden obligatorio, verificado el 2026-09-19: la rama `feat/media-keys-ipc` de
+      este repo **no está pusheada** (`git ls-remote --heads origin` vacío), y el
+      submódulo `home/.config/quickshell/selene` de `dotfiles` sigue en `0e5e18e`
+      (`main`). Así que: push → merge a `main` → bump del submódulo → recién ahí los
+      binds nuevos tienen a quién llamar. Sin el bump se cambia un fallo silencioso
+      por otro.
+      Distinción que costó un diagnóstico: el **deploy vivo**
+      (`~/.config/quickshell/selene`) es un checkout propio en `4997de0` sobre
+      `feat/media-keys-ipc`, **separado** del submódulo. Por eso la shell viva ya
+      expone las tres funciones aunque el submódulo no se movió.
 
 ## Follow-ups registrados (no son tareas de este cambio)
 
