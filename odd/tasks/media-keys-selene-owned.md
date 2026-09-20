@@ -142,13 +142,19 @@ capacidad.
   `risk: high` con la evidencia "code that starts other processes in
   tests/test_media_contracts.py" (`reason_code: process_boundary`, `signal:
   shell_process`), y ese archivo importa solo `pathlib`, `re` y `unittest`: no hay
-  `subprocess`, `Popen`, `os.system` ni `check_*` en ninguna parte. La correlación
-  más fuerte es el vocabulario `shell` que introdujo el diff — 2 ocurrencias antes
-  (ambas dentro de `Quickshell.Services.Mpris`), 14 después — y en particular la
-  variable local `shell`, que además rompe el estilo del archivo (los otros tres
-  tests usan `source = self.read_required(...)`). No se puede probar el disparador
-  exacto sin re-correr el clasificador sobre una variante. Importa porque esa
-  evidencia es la que vio el humano en el prompt de consentimiento.
+  `subprocess`, `Popen`, `os.system` ni `check_*` en ninguna parte. La evidencia es
+  falsa.
+  Hipótesis descartada: la variable local `shell`. Se renombró a `source` (por
+  convención del archivo, ver `cf1439b`) y ASSESS **sigue** marcando
+  `process_boundary` sobre un rango de 16 líneas que es solo ese rename, así que el
+  disparador no es el nombre de la variable. Bisecado con rangos commiteados:
+  `0e5e18e..HEAD` (3 paths, 276 líneas) y `e3aad62..HEAD` (1 path, 16 líneas, solo
+  el rename) disparan los dos. El disparador real queda sin identificar; no se
+  investiga más porque el único camino barato que queda es deformar nombres que
+  siguen la convención del archivo (`SHELL_QML`, como `DASHBOARD_QML` y
+  `BAR_MEDIA_QML`) para apaciguar a un heurístico. Queda como defecto del
+  clasificador. Importa porque esa evidencia es la que ve el humano en el prompt de
+  consentimiento.
 - **Identidad git rota en este clone, preexistente.** `.git/config` tiene
   `user.name = user.email` desde el 16 sep 08:25, así que cinco commits ya salieron
   con autor `user.email <agusdor14@hotmail.com>` (`9a04360`, `402c0b1`, `1808a31`,
