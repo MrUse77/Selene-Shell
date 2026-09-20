@@ -46,18 +46,30 @@ Item {
     // La lectura y el parseo del archivo viven en Services/Settings.qml; acá
     // solo se declaran las claves que la shell conoce y su tipo. Un valor
     // ausente o del tipo equivocado significa "usar el default". Claves
-    // reconocidas: themesRoot, themeCommand, workspacesPerMonitor y tempSensor.
+    // reconocidas: themesRoot, themeCommand, workspacesPerMonitor, tempSensor,
+    // barHeight, barMarginTop y barMarginSide.
     readonly property string settingsThemesRoot: Settings.str("themesRoot")
 
     readonly property string settingsThemeCommand: Settings.str("themeCommand")
 
-    // Cantidad de workspaces por monitor (la valida el consumidor). Se expone
-    // como string para pasar limpio por pick(), que solo acepta strings no
-    // vacíos; "" significa "usar el default".
-    readonly property string settingsWorkspacesPerMonitor: {
-        const n = Settings.num("workspacesPerMonitor", undefined);
+    // Un setting numérico viaja como string para pasar limpio por pick(), que
+    // solo acepta strings no vacíos; "" significa "usar el default". Si la
+    // clave falta o no es un número, el string queda vacío y la cadena del
+    // consumidor cae a su default.
+    function _numSetting(key) {
+        const n = Settings.num(key, undefined);
         return typeof n === "number" ? String(n) : "";
     }
+
+    // Cantidad de workspaces por monitor (la valida el consumidor).
+    readonly property string settingsWorkspacesPerMonitor: _numSetting("workspacesPerMonitor")
+
+    // Geometría declarada de la barra (la valida y la acota Geometry).
+    readonly property string settingsBarHeight: _numSetting("barHeight")
+
+    readonly property string settingsBarMarginTop: _numSetting("barMarginTop")
+
+    readonly property string settingsBarMarginSide: _numSetting("barMarginSide")
 
     // Nombre del sensor de temperatura (p.ej. "k10temp"); "" = autodetectar.
     readonly property string settingsTempSensor: Settings.str("tempSensor")
