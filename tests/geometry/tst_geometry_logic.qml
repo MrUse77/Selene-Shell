@@ -62,4 +62,22 @@ TestCase {
         compare(GeometryLogic.resolve(0, 7, 0, 200), 0);
         compare(GeometryLogic.resolve(1e9, 7, 34, 96), 96);
     }
+
+    // Distancia del borde superior del monitor al borde superior de un panel que
+    // flota debajo de la barra: geometría declarada + gap de diseño.
+    function test_panel_top_adds_the_design_gap_below_the_bar() {
+        compare(GeometryLogic.panelTop(10, 44, 2), 56);
+        compare(GeometryLogic.panelTop(10, 44, 4), 58);
+        compare(GeometryLogic.panelTop(10, 44, 6), 60);
+        compare(GeometryLogic.panelTop(30, 60, 4), 94);
+        compare(GeometryLogic.panelTop(0, 0, 0), 0);
+    }
+
+    // Margen derecho de un panel alineado a la derecha: margen lateral
+    // declarado + inset de diseño.
+    function test_panel_right_adds_the_design_inset() {
+        compare(GeometryLogic.panelRight(14, 4), 18);
+        compare(GeometryLogic.panelRight(30, 4), 34);
+        compare(GeometryLogic.panelRight(0, 0), 0);
+    }
 }

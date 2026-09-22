@@ -27,9 +27,13 @@ PanelWindow {
         top: true
         right: true
     }
+    // Gap de diseño bajo la barra e inset derecho: 6 y 4 reproducen el top
+    // previo (10 + 44 + 6 = 60) y el right previo (14 + 4 = 18).
+    readonly property int gapBelowBar: 6
+    readonly property int rightInset: 4
     margins {
-        top: 60
-        right: 18
+        top: Geometry.panelTop(gapBelowBar)
+        right: Geometry.panelRight(rightInset)
     }
     implicitWidth: 380
     implicitHeight: popupsCol.childrenRect.height

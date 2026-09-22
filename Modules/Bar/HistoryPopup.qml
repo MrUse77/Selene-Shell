@@ -23,9 +23,13 @@ PanelWindow {
         top: true
         right: true
     }
+    // Gap de diseño bajo la barra e inset derecho: 4 y 4 reproducen el top
+    // previo (10 + 44 + 4 = 58) y el right previo (14 + 4 = 18).
+    readonly property int gapBelowBar: 4
+    readonly property int rightInset: 4
     margins {
-        top: 58
-        right: 18
+        top: Geometry.panelTop(gapBelowBar)
+        right: Geometry.panelRight(rightInset)
     }
     implicitWidth: 380
     implicitHeight: 420
