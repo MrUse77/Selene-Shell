@@ -116,8 +116,16 @@ los mantengamos nosotros. Es el eje que **compone**; el multi-escritorio es el q
       monitor dejaron de ser un 5 fijo; y un chequeo de updates imposible ya no se
       confunde con "estás al día".
       Los estados quedaron expuestos para diagnóstico, pero **ningún widget los
-      consume todavía**. Falta: geometría y márgenes (#8), comandos de herramientas
-      (#9), identidad y locale (#10) y la UI que haga visibles esos estados (#11).
+      consume todavía**. La geometría (#8) quedó partida en dos: la barra ya declara
+      su alto y sus márgenes por la cadena de siempre (`SHELL_BAR_HEIGHT`,
+      `SHELL_BAR_MARGIN_TOP`, `SHELL_BAR_MARGIN_SIDE`, o `barHeight`,
+      `barMarginTop` y `barMarginSide` en `shell.json`), su zona exclusiva se deriva
+      de la altura y sin configuración el layout es idéntico al previo. Los overlays
+      y popups —OSD, dashboard, calendario, historial y notificaciones— siguen con
+      literales encadenados a la altura de barra (56/58/60, OSD a 90 del borde
+      inferior): esa es la segunda mitad, pendiente.
+      Falta: comandos de herramientas (#9), identidad y locale (#10) y la UI que
+      haga visibles esos estados (#11).
 
 ### Del otro lado (MoonArch), para que el contrato cierre
 

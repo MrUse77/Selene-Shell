@@ -2,5 +2,8 @@
     "themesRoot": null,
     "themeCommand": null,
     "workspacesPerMonitor": null,
-    "tempSensor": null
+    "tempSensor": null,
+    "barHeight": null,
+    "barMarginTop": null,
+    "barMarginSide": null
 }

@@ -19,12 +19,14 @@ PanelWindow {
         right: true
     }
     margins {
-        top: 10
-        left: 14
-        right: 14
+        top: Geometry.barMarginTop
+        left: Geometry.barMarginSide
+        right: Geometry.barMarginSide
     }
-    implicitHeight: 44
-    exclusiveZone: 44
+    implicitHeight: Geometry.barHeight
+    // La zona exclusiva ES la altura de la barra: no es un valor independiente
+    // que pueda desincronizarse del alto real.
+    exclusiveZone: implicitHeight
     color: "transparent"
 
     readonly property bool anyOverlay: OverlayCoordinator.isOpen
