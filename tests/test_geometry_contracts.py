@@ -10,6 +10,12 @@ La última fase fija el ROL de cada argumento de las llamadas reales (no solo el
 orden textual de los identificadores): comparar índices de texto deja pasar una
 cadena invertida, un min/max intercambiado o un binding de margen cambiado de
 borde siempre que los nombres sigan apareciendo en el archivo.
+
+La segunda mitad extiende el alcance a las superficies que flotan alrededor de la
+barra (OSD, dashboard, calendario, historial y notificaciones): sus márgenes
+dejan de ser literales calibrados y se derivan de la geometría declarada más un
+gap de diseño nombrado en cada módulo, y el default tiene que reproducir el
+layout previo.
 """
 
 from pathlib import Path
@@ -36,6 +42,8 @@ GEOMETRY_CHAINS = (
      "MIN_MARGIN", "MAX_MARGIN"),
     ("SHELL_BAR_MARGIN_SIDE", "Theme.settingsBarMarginSide", "defaultBarMarginSide",
      "MIN_MARGIN", "MAX_MARGIN"),
+    ("SHELL_OSD_MARGIN_BOTTOM", "Theme.settingsOsdMarginBottom",
+     "defaultOsdMarginBottom", "MIN_MARGIN", "MAX_MARGIN"),
 )
 
 # Propiedad `settings*` de Theme.qml y el accesor + la clave exactos que lee.
@@ -47,6 +55,42 @@ THEME_SETTINGS_KEYS = {
     "settingsBarHeight": ("_numSetting", "barHeight"),
     "settingsBarMarginTop": ("_numSetting", "barMarginTop"),
     "settingsBarMarginSide": ("_numSetting", "barMarginSide"),
+    "settingsOsdMarginBottom": ("_numSetting", "osdMarginBottom"),
+}
+
+# Las cinco superficies que flotan alrededor de la barra y el binding exacto que
+# debe recibir cada borde de su bloque/directiva `margins`. El OSD usa la forma
+# punteada `margins.bottom`; el resto, un bloque `margins { }`.
+FLOATING_SURFACE_MARGINS = {
+    "Modules/Osd/Osd.qml": {
+        "bottom": "Geometry.osdMarginBottom",
+    },
+    "Modules/Dashboard/Dashboard.qml": {
+        "top": "Geometry.panelTop(gapBelowBar)",
+        "right": "Geometry.barMarginSide",
+        "bottom": "Geometry.barMarginSide",
+    },
+    "Modules/Bar/CalendarPopup.qml": {
+        "top": "Geometry.panelTop(gapBelowBar)",
+        "right": "Geometry.panelRight(rightInset)",
+    },
+    "Modules/Bar/HistoryPopup.qml": {
+        "top": "Geometry.panelTop(gapBelowBar)",
+        "right": "Geometry.panelRight(rightInset)",
+    },
+    "Modules/Notifications/Notifications.qml": {
+        "top": "Geometry.panelTop(gapBelowBar)",
+        "right": "Geometry.panelRight(rightInset)",
+    },
+}
+
+# Gap de diseño declarado por cada superficie flotante: no es un supuesto de
+# máquina, es la decisión estética ahora visible y con nombre en el módulo.
+FLOATING_SURFACE_CONSTANTS = {
+    "Modules/Dashboard/Dashboard.qml": {"gapBelowBar": 2},
+    "Modules/Bar/CalendarPopup.qml": {"gapBelowBar": 4, "rightInset": 4},
+    "Modules/Bar/HistoryPopup.qml": {"gapBelowBar": 4, "rightInset": 4},
+    "Modules/Notifications/Notifications.qml": {"gapBelowBar": 6, "rightInset": 4},
 }
 
 
@@ -163,6 +207,46 @@ def top_level_arguments(source: str, callee: str) -> list:
         search_from = i
 
 
+def declared_int(source: str, name: str) -> int:
+    """Valor del `readonly property int <name>: <entero>` declarado en `source`."""
+    match = re.search(
+        rf"readonly\s+property\s+int\s+\b{re.escape(name)}\b\s*:\s*(-?\d+)\b",
+        source,
+    )
+    if match is None:
+        raise AssertionError(
+            f"no se encontró `readonly property int {name}: <entero>` en el fuente"
+        )
+    return int(match.group(1))
+
+
+def floating_margins(source: str) -> tuple:
+    """Bindings de márgenes de una superficie flotante y su texto crudo.
+
+    Acepta las dos formas que usa la casa: el bloque `margins { top: ... }` del
+    dashboard, los popups y las notificaciones, y la forma punteada
+    `margins.bottom: ...` del OSD. Devuelve (bindings, raw), con `raw` como el
+    texto de cada binding para poder exigir que ninguna de las dos formas
+    conserve un literal numérico.
+    """
+    clean = strip_comments(source)
+    bindings = {}
+    raw = []
+    for body in braced_blocks(source, r"\bmargins\s*\{"):
+        raw.append(body)
+        for line in body.splitlines():
+            stripped = line.strip()
+            if not stripped:
+                continue
+            match = re.fullmatch(r"([A-Za-z_]\w*)\s*:\s*(.+)", stripped)
+            if match:
+                bindings[match.group(1)] = canonical(match.group(2))
+    for edge, value in re.findall(r"\bmargins\.([A-Za-z_]\w*)\s*:\s*([^\n]+)", clean):
+        bindings[edge] = canonical(value)
+        raw.append(value)
+    return bindings, raw
+
+
 def braced_blocks(source: str, pattern: str) -> list:
     """Cuerpos (sin las llaves) de cada bloque cuya cabecera matchea `pattern`.
 
@@ -211,7 +295,7 @@ class GeometryContracts(unittest.TestCase):
     def test_shell_json_declares_geometry_keys(self) -> None:
         """shell.json declara las claves de geometría y null significa "usar el default"."""
         settings = json.loads(self.read_required(SHELL_JSON))
-        for key in ("barHeight", "barMarginTop", "barMarginSide"):
+        for key in ("barHeight", "barMarginTop", "barMarginSide", "osdMarginBottom"):
             self.assertIn(key, settings, f"shell.json debe declarar {key}")
             self.assertIsNone(
                 settings[key],
@@ -227,7 +311,8 @@ class GeometryContracts(unittest.TestCase):
         """
         theme_source = self.read_required(THEME_QML)
         declared = set(re.findall(r"readonly\s+property\s+string\s+(settings\w+)\b", theme_source))
-        for name in ("settingsBarHeight", "settingsBarMarginTop", "settingsBarMarginSide"):
+        for name in ("settingsBarHeight", "settingsBarMarginTop", "settingsBarMarginSide",
+                     "settingsOsdMarginBottom"):
             self.assertIn(name, declared, f"Theme.qml debe declarar la propiedad derivada {name}")
 
     def test_geometry_singleton_is_registered(self) -> None:
@@ -390,9 +475,9 @@ class GeometryContracts(unittest.TestCase):
         geometry = self.read_required(GEOMETRY_QML)
         picks = top_level_arguments(geometry, "Theme.pick")
         self.assertEqual(
-            len(picks), 3,
-            "Geometry.qml debe encadenar exactamente 3 llamadas a Theme.pick (una por valor), "
-            f"pero se encontraron {len(picks)}",
+            len(picks), len(GEOMETRY_CHAINS),
+            "Geometry.qml debe encadenar exactamente una llamada a Theme.pick por valor "
+            f"declarado ({len(GEOMETRY_CHAINS)}), pero se encontraron {len(picks)}",
         )
         for env_name, setting, _default, _min, _max in GEOMETRY_CHAINS:
             env_call = f'Quickshell.env("{env_name}")'
@@ -428,9 +513,9 @@ class GeometryContracts(unittest.TestCase):
         geometry = self.read_required(GEOMETRY_QML)
         calls = top_level_arguments(geometry, "GeometryLogic.resolve")
         self.assertEqual(
-            len(calls), 3,
-            "Geometry.qml debe resolver exactamente 3 valores con GeometryLogic.resolve, "
-            f"pero se encontraron {len(calls)}",
+            len(calls), len(GEOMETRY_CHAINS),
+            "Geometry.qml debe resolver exactamente un valor por cadena declarada "
+            f"({len(GEOMETRY_CHAINS)}) con GeometryLogic.resolve, pero se encontraron {len(calls)}",
         )
         for env_name, _setting, default, minimum, maximum in GEOMETRY_CHAINS:
             with self.subTest(env=env_name):
@@ -605,6 +690,96 @@ class GeometryContracts(unittest.TestCase):
             "El header no puede documentar la forma por directorio (-input tests/geometry): "
             "CI corre el archivo, y un comando documentado distinto desvía a quien depura",
         )
+
+    # ---- Fase D: superficies flotantes que derivan de la geometría ----
+
+    def test_floating_surfaces_bind_their_margins_to_geometry_without_literals(self) -> None:
+        """Los márgenes de las cinco superficies flotantes derivan, sin literales.
+
+        Cada borde recibe la expresión que le toca: el OSD su margen declarable, el
+        dashboard el gap exterior de la barra, y los popups y notificaciones el top
+        derivado (barra + gap) y el right derivado (margen lateral + inset). Un
+        literal absoluto delata que el offset calibrado volvió.
+        """
+        for rel, expected in FLOATING_SURFACE_MARGINS.items():
+            with self.subTest(surface=rel):
+                source = self.read_required(PROJECT_ROOT / rel)
+                bindings, raw = floating_margins(source)
+                self.assertEqual(
+                    bindings, expected,
+                    f"{rel} debe bindear sus márgenes a la geometría declarada: "
+                    f"se esperaba {expected}, pero hoy declara {bindings}",
+                )
+                for chunk in raw:
+                    self.assertNotRegex(
+                        chunk, r"\d",
+                        f"{rel}: el margen no puede conservar un literal numérico absoluto "
+                        f"({chunk.strip()!r}); el offset tiene que salir de Geometry",
+                    )
+
+    def test_floating_surfaces_pin_their_design_constants(self) -> None:
+        """El gap de diseño de cada superficie es una decisión local, pineada.
+
+        Si el número se cuela como offset absoluto o cambia de valor, el layout se
+        mueve: la constante tiene que existir, con nombre y con el valor que
+        reproduce el layout previo.
+        """
+        for rel, constants in FLOATING_SURFACE_CONSTANTS.items():
+            source = self.read_required(PROJECT_ROOT / rel)
+            for name, value in constants.items():
+                with self.subTest(surface=rel, constant=name):
+                    self.assertRegex(
+                        source,
+                        rf"readonly\s+property\s+int\s+\b{name}\b\s*:\s*{value}\b",
+                        f"{rel} debe declarar `readonly property int {name}: {value}` "
+                        "(el gap de diseño que reproduce el layout previo)",
+                    )
+
+    def test_floating_defaults_still_reproduce_the_previous_layout(self) -> None:
+        """Con los defaults declarados, cada offset derivado iguala el literal previo.
+
+        Es el contrato central de la segunda mitad: cambiar la fuente del offset no
+        puede mover un píxel cuando no hay env ni setting. La aritmética se
+        recalcula acá desde los defaults que declara Geometry.qml más la constante
+        de diseño que declara cada módulo, y se compara contra el literal histórico:
+        no se repite el resultado ya calculado como si fuera una verificación.
+        """
+        geometry = self.read_required(GEOMETRY_QML)
+        bar_height = declared_int(geometry, "defaultBarHeight")
+        margin_top = declared_int(geometry, "defaultBarMarginTop")
+        margin_side = declared_int(geometry, "defaultBarMarginSide")
+        osd_default = declared_int(geometry, "defaultOsdMarginBottom")
+
+        dashboard = "Modules/Dashboard/Dashboard.qml"
+        calendar = "Modules/Bar/CalendarPopup.qml"
+        history = "Modules/Bar/HistoryPopup.qml"
+        notifications = "Modules/Notifications/Notifications.qml"
+
+        def gap(rel: str, name: str) -> int:
+            return declared_int(self.read_required(PROJECT_ROOT / rel), name)
+
+        # (superficie, offset derivado, literal previo)
+        cases = (
+            ("Dashboard.top", margin_top + bar_height + gap(dashboard, "gapBelowBar"), 56),
+            ("Dashboard.right", margin_side, 14),
+            ("Dashboard.bottom", margin_side, 14),
+            ("CalendarPopup.top", margin_top + bar_height + gap(calendar, "gapBelowBar"), 58),
+            ("HistoryPopup.top", margin_top + bar_height + gap(history, "gapBelowBar"), 58),
+            ("Notifications.top",
+             margin_top + bar_height + gap(notifications, "gapBelowBar"), 60),
+            ("CalendarPopup.right", margin_side + gap(calendar, "rightInset"), 18),
+            ("HistoryPopup.right", margin_side + gap(history, "rightInset"), 18),
+            ("Notifications.right", margin_side + gap(notifications, "rightInset"), 18),
+            ("Osd.bottom", osd_default, 90),
+        )
+        for surface, derived, previous in cases:
+            with self.subTest(surface=surface):
+                self.assertEqual(
+                    derived, previous,
+                    f"{surface}: con los defaults declarados "
+                    f"({bar_height}/{margin_top}/{margin_side}) el offset derivado debe "
+                    f"igualar el literal previo {previous}, no {derived}",
+                )
 
 
 if __name__ == "__main__":

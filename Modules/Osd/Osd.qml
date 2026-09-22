@@ -14,7 +14,9 @@ PanelWindow {
     id: root
 
     anchors.bottom: true
-    margins.bottom: 90
+    // Declarable por cadena (env -> shell.json -> default); el default 90
+    // reproduce el layout previo.
+    margins.bottom: Geometry.osdMarginBottom
     implicitWidth: 340
     implicitHeight: 56
     color: "transparent"

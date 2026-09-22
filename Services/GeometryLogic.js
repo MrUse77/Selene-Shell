@@ -32,3 +32,23 @@ function resolve(raw, fallback, min, max) {
     if (!Number.isInteger(n)) return fallback;
     return Math.min(Math.max(n, min), max);
 }
+
+// Distancia del borde superior del monitor al borde superior de un panel que
+// flota debajo de la barra: la geometría declarada de la barra más el gap de
+// diseño del consumidor.
+//
+// No acota: los dos primeros sumandos ya pasaron por resolve() y el gap es una
+// constante de diseño del módulo consumidor, así que la suma no puede salirse
+// de rango por un valor crudo.
+function panelTop(marginTop, barHeight, gap) {
+    return marginTop + barHeight + gap;
+}
+
+// Margen derecho de un panel alineado a la derecha: el margen lateral declarado
+// más el inset de diseño del consumidor.
+//
+// No acota, por lo mismo que panelTop: ambos sumandos ya son valores confiables
+// (declarados o constantes de diseño), no crudos.
+function panelRight(marginSide, inset) {
+    return marginSide + inset;
+}

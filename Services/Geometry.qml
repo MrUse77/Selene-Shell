@@ -4,7 +4,9 @@ import QtQuick
 import Quickshell
 import "GeometryLogic.js" as GeometryLogic
 
-// Geometría de la barra: alto y márgenes declarados en un solo lugar.
+// Geometría de la barra: alto y márgenes declarados en un solo lugar. El único
+// valor que no es de la barra es osdMarginBottom (el OSD flota abajo, no debajo
+// de la barra), declarable por la misma cadena.
 //
 // Antes estos números vivían hardcodeados en Modules/Bar/Bar.qml (top: 10,
 // left/right: 14, implicitHeight: 44) y estaban repetidos: cambiar el alto de
@@ -15,8 +17,9 @@ import "GeometryLogic.js" as GeometryLogic
 //
 // Cadena de cada valor (el primer valor no vacío gana):
 //   1. Variable de entorno neutra   SHELL_BAR_HEIGHT / SHELL_BAR_MARGIN_TOP /
-//                                   SHELL_BAR_MARGIN_SIDE
-//   2. Setting de la shell          barHeight / barMarginTop / barMarginSide
+//                                   SHELL_BAR_MARGIN_SIDE / SHELL_OSD_MARGIN_BOTTOM
+//   2. Setting de la shell          barHeight / barMarginTop / barMarginSide /
+//                                   osdMarginBottom
 //   3. Default                      el layout histórico de este archivo
 //
 // El valor crudo llega como string y puede ser basura o un absurdo (una barra de
@@ -30,6 +33,9 @@ Item {
     readonly property int defaultBarHeight: 44
     readonly property int defaultBarMarginTop: 10
     readonly property int defaultBarMarginSide: 14
+    // El OSD no se deriva de la barra: su default reproduce el margen inferior
+    // previo (margins.bottom: 90 de Osd.qml).
+    readonly property int defaultOsdMarginBottom: 90
 
     // Alto de la barra: la env de nombre neutro precede al setting, y el
     // default va último en la cadena.
@@ -67,4 +73,22 @@ Item {
         GeometryLogic.MIN_MARGIN,
         GeometryLogic.MAX_MARGIN
     )
+
+    // Margen inferior del OSD: el único valor nuevo declarable de esta mitad.
+    // La cadena es la misma de la casa — env neutra, setting, default.
+    readonly property int osdMarginBottom: GeometryLogic.resolve(
+        Theme.pick(
+            Quickshell.env("SHELL_OSD_MARGIN_BOTTOM"),
+            Theme.settingsOsdMarginBottom,
+            ""
+        ),
+        defaultOsdMarginBottom,
+        GeometryLogic.MIN_MARGIN,
+        GeometryLogic.MAX_MARGIN
+    )
+
+    // Derivaciones de los paneles que flotan alrededor de la barra: la geometría
+    // declarada de la barra más el gap de diseño que declara cada consumidor.
+    function panelTop(gap) { return GeometryLogic.panelTop(barMarginTop, barHeight, gap); }
+    function panelRight(inset) { return GeometryLogic.panelRight(barMarginSide, inset); }
 }

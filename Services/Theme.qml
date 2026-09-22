@@ -47,7 +47,7 @@ Item {
     // solo se declaran las claves que la shell conoce y su tipo. Un valor
     // ausente o del tipo equivocado significa "usar el default". Claves
     // reconocidas: themesRoot, themeCommand, workspacesPerMonitor, tempSensor,
-    // barHeight, barMarginTop y barMarginSide.
+    // barHeight, barMarginTop, barMarginSide y osdMarginBottom.
     readonly property string settingsThemesRoot: Settings.str("themesRoot")
 
     readonly property string settingsThemeCommand: Settings.str("themeCommand")
@@ -70,6 +70,9 @@ Item {
     readonly property string settingsBarMarginTop: _numSetting("barMarginTop")
 
     readonly property string settingsBarMarginSide: _numSetting("barMarginSide")
+
+    // Margen inferior del OSD (el único valor nuevo declarable de #8).
+    readonly property string settingsOsdMarginBottom: _numSetting("osdMarginBottom")
 
     // Nombre del sensor de temperatura (p.ej. "k10temp"); "" = autodetectar.
     readonly property string settingsTempSensor: Settings.str("tempSensor")

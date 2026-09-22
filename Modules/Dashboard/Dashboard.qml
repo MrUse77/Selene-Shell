@@ -25,10 +25,12 @@ PanelWindow {
         right: true
         bottom: true
     }
+    // Gap de diseño bajo la barra: 2 reproduce el top previo (10 + 44 + 2 = 56).
+    readonly property int gapBelowBar: 2
     margins {
-        top: 56
-        right: 14
-        bottom: 14
+        top: Geometry.panelTop(gapBelowBar)
+        right: Geometry.barMarginSide
+        bottom: Geometry.barMarginSide
     }
     implicitWidth: 470
     color: "transparent"
