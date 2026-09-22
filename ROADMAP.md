@@ -116,14 +116,15 @@ los mantengamos nosotros. Es el eje que **compone**; el multi-escritorio es el q
       monitor dejaron de ser un 5 fijo; y un chequeo de updates imposible ya no se
       confunde con "estás al día".
       Los estados quedaron expuestos para diagnóstico, pero **ningún widget los
-      consume todavía**. La geometría (#8) quedó partida en dos: la barra ya declara
-      su alto y sus márgenes por la cadena de siempre (`SHELL_BAR_HEIGHT`,
+      consume todavía**. La geometría (#8) quedó declarada entera: la barra tiene su
+      alto y sus márgenes por la cadena de siempre (`SHELL_BAR_HEIGHT`,
       `SHELL_BAR_MARGIN_TOP`, `SHELL_BAR_MARGIN_SIDE`, o `barHeight`,
       `barMarginTop` y `barMarginSide` en `shell.json`), su zona exclusiva se deriva
-      de la altura y sin configuración el layout es idéntico al previo. Los overlays
-      y popups —OSD, dashboard, calendario, historial y notificaciones— siguen con
-      literales encadenados a la altura de barra (56/58/60, OSD a 90 del borde
-      inferior): esa es la segunda mitad, pendiente.
+      de la altura, y el OSD declara su distancia al borde inferior
+      (`SHELL_OSD_MARGIN_BOTTOM` / `osdMarginBottom`, default 90). Los overlays y
+      popups ya no repiten esa geometría: la derivan de la barra más un gap de
+      diseño que cada módulo declara con nombre, así que cambiar el alto de la barra
+      los mueve a todos. Sin configuración el layout es idéntico al previo.
       Falta: comandos de herramientas (#9), identidad y locale (#10) y la UI que
       haga visibles esos estados (#11).
 
