@@ -274,10 +274,11 @@ class SeleneCorrectionContracts(unittest.TestCase):
         self.assertIn("Hyprland.toplevels.values", source)
         self.assertIn('Hyprland.dispatch("focuswindow address:"', source)
         self.assertIn('root.themeSelector, "--list"]', source)
-        self.assertIn('"find", Theme.themesRoot', source)
+        self.assertIn("Commands.find", source)
+        self.assertIn("Theme.themesRoot", source)
         self.assertIn('[themeSelector, "--apply", item.themeId]', source)
         self.assertIn("Theme.reloadTheme()", source)
-        self.assertIn('["wl-copy", calcResult]', source)
+        self.assertIn("Commands.argv(Commands.copy, [calcResult])", source)
 
     def test_launcher_mode_button_text_is_explicitly_vertically_centered(self) -> None:
         source = LAUNCHER_QML.read_text(encoding="utf-8")
@@ -312,14 +313,25 @@ class SeleneCorrectionContracts(unittest.TestCase):
 
     def test_power_menu_confirms_only_destructive_actions(self) -> None:
         source = POWER_MENU_QML.read_text(encoding="utf-8")
-        self.assertIn('confirm: false, cmd: ["hyprlock"]', source)
-        self.assertIn('confirm: false, cmd: ["systemctl", "suspend"]', source)
-        for command in (
-            '["hyprctl", "dispatch", "exit"]',
-            '["systemctl", "reboot"]',
-            '["systemctl", "poweroff"]',
+        self.assertIn(
+            'confirm: false, tool: "lock", cmd: Commands.lock, args: []',
+            source,
+        )
+        self.assertIn(
+            'confirm: false, tool: "suspend", cmd: Commands.systemctl, args: ["suspend"]',
+            source,
+        )
+        for tool, cmd, args in (
+            ("exit", "Commands.hyprctl", '["dispatch", "exit"]'),
+            ("reboot", "Commands.systemctl", '["reboot"]'),
+            ("poweroff", "Commands.systemctl", '["poweroff"]'),
         ):
-            self.assertRegex(source, rf"confirm:\s*true,\s*cmd:\s*{re.escape(command)}")
+            self.assertIn(
+                f'confirm: true, tool: "{tool}", cmd: {cmd}, args: {args}',
+                source,
+            )
+        # hyprlock semantics survive the migration via the semantic tool id.
+        self.assertIn('tool === "lock"', source)
         self.assertIn("onExited:", source)
         self.assertIn("stderr", source)
 
@@ -423,8 +435,8 @@ class SeleneCorrectionContracts(unittest.TestCase):
         self.assertNotRegex(power, r"interval\s*:\s*250\b")
         self.assertRegex(launcher, r"function\s+commandStarted\b[\s\S]*?commandProcess\s*=\s*null")
         self.assertRegex(power, r"function\s+actionStarted\b[\s\S]*?actionProcess\s*=\s*null")
-        self.assertIn('["notify-send"', launcher)
-        self.assertIn('["notify-send"', power)
+        self.assertIn("Commands.notify(", launcher)
+        self.assertIn("Commands.notify(", power)
 
     def test_theme_load_invalidation_cancels_wrapper_before_releasing_ownership(self) -> None:
         source = LAUNCHER_QML.read_text(encoding="utf-8")
@@ -566,12 +578,24 @@ class SeleneCorrectionContracts(unittest.TestCase):
             r"if\s*\(themeListReadOnly\)\s*return",
             "El modo lectura no debe intentar aplicar temas",
         )
+        # El listado de solo lectura se arma con el comando find resuelto
+        # (Commands.find) sobre la raíz Theme.themesRoot, no con un literal.
+        find_argv = re.search(
+            r"Commands\.argv\(\s*Commands\.find,\s*\[\s*Theme\.themesRoot,",
+            source,
+        )
+        self.assertIsNotNone(
+            find_argv,
+            "El argv del listado debe construirse con Commands.find sobre Theme.themesRoot",
+        )
+        # Un find configurado inválido no puede quedar cargando ni fallar mudo.
+        self.assertIn("!findArgv.ok", source)
         # El orden del ternario es parte del contrato: sin este anclaje, un
         # ternario invertido pasaria porque cada argv ya se assertea por
         # separado en otro contrato.
         ternary = re.search(
             r"process\.exec\(\s*themeListReadOnly\s*\?\s*"
-            r"(?P<readonly_argv>\[[^\]]*\])\s*:\s*"
+            r"(?P<readonly_argv>[\w.]+)\s*:\s*"
             r"(?P<provider_argv>\[[^\]]*\])\s*\)",
             body,
             re.DOTALL,
@@ -580,12 +604,10 @@ class SeleneCorrectionContracts(unittest.TestCase):
             ternary,
             "El exec del listado debe elegir el argv con el ternario themeListReadOnly",
         )
-        self.assertIn(
-            '"find", Theme.themesRoot',
+        self.assertEqual(
             ternary.group("readonly_argv"),
-            "La rama verdadera del ternario debe ser el listado find sobre la "
-            "raiz resuelta Theme.themesRoot, no sobre una referencia no "
-            "declarada en el Launcher",
+            "findArgv.args",
+            "La rama verdadera del ternario debe ser el argv resuelto del listado find",
         )
         self.assertIn(
             '[root.themeSelector, "--list"]',

@@ -1,9 +1,8 @@
 import QtQuick
-import Quickshell
 import "../../Services"
 import "../../Components"
 
-// Volumen del sink por defecto: clic abre pavucontrol, rueda ajusta.
+// Volumen del sink por defecto: clic abre el mezclador (Commands.audio), rueda ajusta.
 BarWidget {
     id: root
 
@@ -43,7 +42,7 @@ BarWidget {
     MouseArea {
         anchors.fill: parent
         cursorShape: Qt.PointingHandCursor
-        onClicked: Quickshell.execDetached(["pavucontrol"])
+        onClicked: Commands.launch(Commands.argv(Commands.audio, []), "Selene audio failed")
     }
 
     WheelHandler {

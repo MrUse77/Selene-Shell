@@ -58,12 +58,17 @@ PanelWindow {
     }
 
     function refreshBt() {
-        btProc.exec(["bluetoothctl", "show"]);
+        // Sondeo pasivo: un comando inválido se omite acá; el clic (toggleBt)
+        // es quien reporta la falla de forma visible.
+        const btArgv = Commands.argv(Commands.bluetooth, ["show"]);
+        if (btArgv.ok) btProc.exec(btArgv.args);
     }
 
     function toggleBt() {
+        const btArgv = Commands.argv(Commands.bluetooth, ["power", btOn ? "on" : "off"]);
+        Commands.launch(btArgv, "Selene bluetooth failed");
+        if (!btArgv.ok) return;
         btOn = !btOn;
-        Quickshell.execDetached(["bluetoothctl", "power", btOn ? "on" : "off"]);
         Qt.callLater(refreshBt);
     }
 
@@ -661,14 +666,14 @@ PanelWindow {
                         anchors.centerIn: parent
                         spacing: 26
 
-                        // [icon, label, color, comando]
+                        // [icon, label, color, comando, args]
                         Repeater {
                             model: [
-                                { icon: "󰐥", label: "Apagar", color: "urgent", cmd: ["systemctl", "poweroff"] },
-                                { icon: "󰜉", label: "Reiniciar", color: "purple", cmd: ["systemctl", "reboot"] },
-                                { icon: "󰤄", label: "Suspender", color: "cyan", cmd: ["systemctl", "suspend"] },
-                                { icon: "󰍁", label: "Bloquear", color: "accent", cmd: ["hyprlock"] },
-                                { icon: "󰿅", label: "Salir", color: "warning", cmd: ["hyprctl", "dispatch", "exit"] }
+                                { icon: "󰐥", label: "Apagar", color: "urgent", cmd: Commands.systemctl, args: ["poweroff"] },
+                                { icon: "󰜉", label: "Reiniciar", color: "purple", cmd: Commands.systemctl, args: ["reboot"] },
+                                { icon: "󰤄", label: "Suspender", color: "cyan", cmd: Commands.systemctl, args: ["suspend"] },
+                                { icon: "󰍁", label: "Bloquear", color: "accent", cmd: Commands.lock, args: [] },
+                                { icon: "󰿅", label: "Salir", color: "warning", cmd: Commands.hyprctl, args: ["dispatch", "exit"] }
                             ]
 
                             delegate: Column {
@@ -690,7 +695,9 @@ PanelWindow {
                                     MouseArea {
                                         anchors.fill: parent
                                         cursorShape: Qt.PointingHandCursor
-                                        onClicked: Quickshell.execDetached(modelData.cmd)
+                                        onClicked: Commands.launch(
+                                            Commands.argv(modelData.cmd, modelData.args),
+                                            "Selene session action failed")
                                     }
                                 }
 

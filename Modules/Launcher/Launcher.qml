@@ -211,7 +211,7 @@ PanelWindow {
             searchInput.forceActiveFocus();
             return;
         }
-        Quickshell.execDetached(["notify-send", "-a", "Selene", title, message]);
+        Commands.notify(title, message);
     }
 
     function invalidateThemeLoad() {
@@ -238,6 +238,15 @@ PanelWindow {
         statusText = themeListReadOnly
             ? "Listing themes read-only: applying requires a theme provider"
             : "Loading validated MoonArch themes…";
+        const findArgv = themeListReadOnly
+            ? Commands.argv(Commands.find, [Theme.themesRoot, "-mindepth", "1", "-maxdepth", "1", "-type", "d", "-printf", "%f\\n"])
+            : { ok: true, args: [], error: "" };
+        if (!findArgv.ok) {
+            themesLoading = false;
+            statusError = true;
+            statusText = findArgv.error;
+            return;
+        }
 
         const launch = OperationState.begin(themeLoadState);
         if (!launch.accepted) return;
@@ -260,13 +269,14 @@ PanelWindow {
         themeListProcess = process;
         themeListStartupWatchdog.restart();
         // Degradación D4: sin comando disponible, listar los directorios de
-        // la raíz resuelta en modo lectura con find, en vez de fallar.
+        // la raíz resuelta en modo lectura con el comando find resuelto
+        // (Commands.find), en vez de fallar.
         // El tipado de qmllint sobre el retorno de createObject() es QObject y
         // marca exec como missing-property; es un falso positivo: el objeto
         // creado ES un Process (Quickshell.Io.Process) y expone exec().
         // qmllint disable missing-property
         process.exec(themeListReadOnly
-            ? ["find", Theme.themesRoot, "-mindepth", "1", "-maxdepth", "1", "-type", "d", "-printf", "%f\\n"]
+            ? findArgv.args
             : [root.themeSelector, "--list"]);
         // qmllint enable missing-property
     }
@@ -342,7 +352,13 @@ PanelWindow {
         if (acceptanceBusy) return;
         if (calcMode) {
             if (calcResult !== "") {
-                Quickshell.execDetached(["wl-copy", calcResult]);
+                const copied = Commands.argv(Commands.copy, [calcResult]);
+                if (!copied.ok) {
+                    statusError = true;
+                    statusText = copied.error;
+                    return;
+                }
+                Commands.launch(copied, "Selene command failed");
                 console.log("[selene:launcher] copied calculator result");
                 close();
             } else {
