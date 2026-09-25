@@ -42,6 +42,26 @@ function failureMessage(event, detail) {
     }
 }
 
+// Detección de FailedToStart (issue #27): Quickshell emite `runningChanged` con
+// `running === false` cuando el proceso no pudo arrancar, y en ese caso no emite
+// `started` ni `exited`. Por eso la regla es "nunca arrancó y no está corriendo".
+// Vive acá para que los dos handlers de runningChanged la compartan y sea
+// ejecutable desde el test, en vez de repetir la comparación inline.
+function startFailed(started, running) {
+    return !running && !started;
+}
+
+// Precedencia del mensaje de salida (D6, issue #27): un exit 0 no es un fallo,
+// así que la guarda vive acá y no en cada caller. Si hay stderr se prefiere; si
+// no, stdout; si ambos están en blanco, queda el código como última señal.
+// Byte a byte igual a la expresión que Commands.qml tenía inline.
+function exitMessage(exitCode, stderr, stdout) {
+    if (exitCode === 0) return "";
+    const err = String(stderr == null ? "" : stderr).trim();
+    const out = String(stdout == null ? "" : stdout).trim();
+    return err || out || ("exit code " + exitCode);
+}
+
 // Tope del log de diagnóstico (D4): es una superficie acotada, no un archivo
 // que crece sin límite.
 const LOG_MAX_LINES = 50;

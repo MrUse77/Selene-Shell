@@ -63,7 +63,7 @@ Item {
     function argv(command, extra) {
         const parsed = LauncherLogic.parseCommand(command);
         if (!parsed.ok) return parsed;
-        return { ok: true, args: parsed.args.concat(extra || []), error: "" };
+        return LauncherLogic.okResult(parsed.args.concat(extra || []));
     }
 
     // Notificación desktop con degradación visible (D4). Se entrega después de
@@ -178,13 +178,13 @@ Item {
             stderr: StdioCollector { id: err }
             onStarted: proc.startedOk = true
             onExited: exitCode => {
-                if (exitCode !== 0)
-                    root.notify(proc.title, err.text.trim() || out.text.trim() || ("exit code " + exitCode));
+                const message = CommandLogic.exitMessage(exitCode, err.text, out.text);
+                if (message !== "") root.notify(proc.title, message);
                 proc.destroy();
             }
             // FailedToStart (binario ausente) emite runningChanged sin onStarted/onExited.
             onRunningChanged: {
-                if (!proc.running && !proc.startedOk) {
+                if (CommandLogic.startFailed(proc.startedOk, proc.running)) {
                     root.notify(proc.title, "Unable to start " + proc.argv[0]);
                     proc.destroy();
                 }
@@ -206,7 +206,7 @@ Item {
             onExited: exitCode => probeProc._report(exitCode === 0)
             // FailedToStart (sh ausente) emite runningChanged sin onStarted/onExited.
             onRunningChanged: {
-                if (!probeProc.running && !probeProc.startedOk)
+                if (CommandLogic.startFailed(probeProc.startedOk, probeProc.running))
                     probeProc._report(false);
             }
             function _report(available) {

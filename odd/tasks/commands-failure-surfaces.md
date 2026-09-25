@@ -168,7 +168,7 @@ reconstruye a mano en `Modules/Launcher/Launcher.qml:243`.
       `Quickshell.statePath("commands.log")` (D4). `Dashboard.refreshBt` con
       estado `btUnavailable` visible (D5). Tests de `logLine`/`appendLog` y
       contratos de la superficie nueva.
-- [ ] **T3 — Caminos de fallo ejecutables y shape unificado (#27).**
+- [x] **T3 — Caminos de fallo ejecutables y shape unificado (#27).**
       Completar la suite con la tabla de los tres caminos (`parse`, `start` sin
       `onStarted`, `exit != 0`) y la precedencia del mensaje de exit; `okResult`
       en `LauncherLogic` usado por `Commands.argv` y por `Launcher.qml` (fin del
@@ -203,7 +203,7 @@ reconstruye a mano en `Modules/Launcher/Launcher.qml:243`.
 - [x] T1 — `Services/CommandLogic.js` (43 líneas), `launchDetached` + sonda en
       `Commands.qml`, migración de los cinco sitios detached, suite nueva en
       `tests/commands/tst_commands_logic.qml` (9 casos) y 4 contratos nuevos.
-- [ ] T3–T4.
+- [ ] T4.
 
 ## Evidencia
 
@@ -256,6 +256,23 @@ reconstruye a mano en `Modules/Launcher/Launcher.qml:243`.
   log en 500 → fallan **suite y contrato**; sondeo de Bluetooth mudo → contrato
   `test_dashboard_bluetooth_poll_surfaces_the_unavailable_state`. Ninguna
   mutación sobrevivió.
+
+### T3 (#27)
+
+- **Los tres caminos de fallo son ejecutables**, no substrings: el parseo
+  (`failureMessage("parse", …)` contra el error real de `LauncherLogic.parseCommand`
+  para comilla sin cerrar y escape final), `FailedToStart` vía la regla pura
+  `CommandLogic.startFailed(started, running)` con tabla de verdad completa, y el
+  exit distinto de 0 vía `CommandLogic.exitMessage` (stderr > stdout > `exit code N`,
+  y vacío cuando el código es 0).
+- **`startFailed` es una sola regla compartida**: los dos handlers de
+  `runningChanged` (`_launcher` y la sonda) la usan, así que la comparación inline
+  ya no está duplicada y volver a escribirla rompe un contrato.
+- **Shape con un solo productor**: `LauncherLogic.okResult(args)` reemplaza el
+  record fabricado a mano en `Launcher.qml:243`; un contrato recorre
+  `Modules/**/*.qml` y falla si reaparece `{ ok: true, args:`. El camino de fallo
+  sigue devolviendo el record del parser tal cual.
+- **Gates**: ver «Verificación del slice» abajo.
 
 ### Tradeoffs aceptados
 

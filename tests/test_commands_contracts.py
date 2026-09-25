@@ -21,6 +21,8 @@ MODULES_DIR = PROJECT_ROOT / "Modules"
 LAUNCHER_QML = MODULES_DIR / "Launcher" / "Launcher.qml"
 POWER_MENU_QML = MODULES_DIR / "PowerMenu" / "PowerMenu.qml"
 DASHBOARD_QML = MODULES_DIR / "Dashboard" / "Dashboard.qml"
+LAUNCHER_LOGIC_JS = PROJECT_ROOT / "Services" / "LauncherLogic.js"
+COMMANDS_SUITE_QML = PROJECT_ROOT / "tests" / "commands" / "tst_commands_logic.qml"
 
 # env name, shell.json key, default — the full resolution chain per command.
 CHAINS = {
@@ -80,6 +82,7 @@ class ToolCommandContracts(unittest.TestCase):
             "function resolve(",
             "function probeArgv(",
             "function failureMessage(",
+            "function startFailed(",
             "function logLine(",
             "function appendLog(",
         ):
@@ -174,7 +177,9 @@ class ToolCommandContracts(unittest.TestCase):
                 tracked.search(path.read_text(encoding="utf-8")),
                 f"{path.relative_to(PROJECT_ROOT)} must not track a detached command",
             )
-        for rel in ("Bar/AudioWidget.qml", "Bar/UpdatesWidget.qml"):
+        # AudioWidget ya no lanza nada: el clic abre el selector de dispositivo
+        # (Modules/Bar/AudioPickerPopup.qml), asi que no entra en este contrato.
+        for rel in ("Bar/UpdatesWidget.qml",):
             source = self.read(MODULES_DIR / rel)
             self.assertIn("Commands.launchDetached", source)
             self.assertNotIn(
@@ -187,6 +192,72 @@ class ToolCommandContracts(unittest.TestCase):
         self.assertIsNotNone(lock_branch, "PowerMenu must split the hyprlock branch")
         self.assertIn("Commands.launchDetached", lock_branch.group(0))
         self.assertNotIn("createObject", lock_branch.group(0))
+
+    def test_tracked_exit_handler_delegates_to_command_logic(self) -> None:
+        source = self.read(COMMANDS_QML)
+        handler = re.search(r"onExited:\s*exitCode\s*=>\s*\{[\s\S]*?\n            \}", source)
+        self.assertIsNotNone(handler, "Commands must keep the tracked exit handler")
+        block = handler.group(0)
+        self.assertIn("CommandLogic.exitMessage(exitCode, err.text, out.text)", block)
+        self.assertIn("proc.destroy()", block)
+        # La decisión inline ya no vive acá: ahora es ejecutable desde el test.
+        self.assertNotIn("err.text.trim() || out.text.trim()", block)
+        self.assertNotIn('"exit code "', block)
+
+    def test_success_record_has_a_single_producer(self) -> None:
+        logic = self.read(LAUNCHER_LOGIC_JS)
+        commands = self.read(COMMANDS_QML)
+        launcher = self.read(LAUNCHER_QML)
+        self.assertIn("function okResult(args)", logic)
+        self.assertIn("return okResult(args);", logic)
+        self.assertIn("LauncherLogic.okResult(parsed.args.concat(extra || []))", commands)
+        self.assertIn("LauncherLogic.okResult([])", launcher)
+        # El camino de fallo sigue devolviendo el record del parser tal cual.
+        self.assertIn("if (!parsed.ok) return parsed;", commands)
+        rebuilt = re.compile(r"\{\s*ok:\s*true,\s*args:")
+        offenders = [
+            str(path.relative_to(PROJECT_ROOT))
+            for path in sorted(MODULES_DIR.rglob("*.qml"))
+            if rebuilt.search(path.read_text(encoding="utf-8"))
+        ]
+        self.assertEqual(
+            offenders,
+            [],
+            f"success record rebuilt by hand instead of LauncherLogic.okResult: {offenders}",
+        )
+
+    def test_qml_suite_covers_the_failure_paths_by_name(self) -> None:
+        source = self.read(COMMANDS_SUITE_QML)
+        self.assertIn(
+            'import "../../Services/LauncherLogic.js" as LauncherLogic',
+            source,
+            "the suite must cross-check the parser that produces the parse error",
+        )
+        for case in (
+            "test_parse_failure_message_comes_from_the_parser",
+            "test_start_failure_message_names_the_program",
+            "test_start_failed_truth_table",
+            "test_exit_message_precedence",
+            "test_exit_message_is_empty_on_success",
+            "test_ok_result_matches_the_parser_success_shape",
+        ):
+            self.assertIn(f"function {case}(", source, f"the QML suite must cover {case}")
+
+    def test_start_failure_rule_is_shared_not_inline(self) -> None:
+        source = self.read(COMMANDS_QML)
+        self.assertIn("CommandLogic.startFailed(proc.startedOk, proc.running)", source)
+        self.assertIn(
+            "CommandLogic.startFailed(probeProc.startedOk, probeProc.running)",
+            source,
+        )
+        self.assertEqual(
+            source.count("CommandLogic.startFailed("),
+            2,
+            "both runningChanged handlers must share the single startFailed rule",
+        )
+        # Las comparaciones inline duplicadas no pueden volver.
+        self.assertNotIn("!proc.running && !proc.startedOk", source)
+        self.assertNotIn("!probeProc.running && !probeProc.startedOk", source)
 
     def test_shell_json_declares_every_new_key_as_null(self) -> None:
         values = json.loads(self.read(SHELL_JSON))

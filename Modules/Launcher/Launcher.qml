@@ -241,7 +241,7 @@ PanelWindow {
             : "Loading validated MoonArch themes…";
         const findArgv = themeListReadOnly
             ? Commands.argv(Commands.find, [Theme.themesRoot, "-mindepth", "1", "-maxdepth", "1", "-type", "d", "-printf", "%f\\n"])
-            : { ok: true, args: [], error: "" };
+            : LauncherLogic.okResult([]);
         if (!findArgv.ok) {
             themesLoading = false;
             statusError = true;
