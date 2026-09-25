@@ -37,6 +37,8 @@ BarWidget {
     MouseArea {
         anchors.fill: parent
         cursorShape: Qt.PointingHandCursor
-        onClicked: Commands.launch(Commands.argv(Commands.updates, []), "Selene updates failed")
+        // Detached: es una terminal interactiva y abortar un update a mitad de
+        // camino es el daño; debe sobrevivir un reload del shell (#25, D2).
+        onClicked: Commands.launchDetached(Commands.argv(Commands.updates, []), "Selene updates failed")
     }
 }

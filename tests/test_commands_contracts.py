@@ -14,6 +14,7 @@ import unittest
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 COMMANDS_QML = PROJECT_ROOT / "Services" / "Commands.qml"
+COMMAND_LOGIC_JS = PROJECT_ROOT / "Services" / "CommandLogic.js"
 SERVICES_QMLDIR = PROJECT_ROOT / "Services" / "qmldir"
 SHELL_JSON = PROJECT_ROOT / "shell.json"
 MODULES_DIR = PROJECT_ROOT / "Modules"
@@ -60,10 +61,73 @@ class ToolCommandContracts(unittest.TestCase):
         source = self.read(COMMANDS_QML)
         self.assertRegex(
             source,
-            r"Theme\.pick\(\s*Quickshell\.env\(envName\),\s*"
+            r"CommandLogic\.resolve\(\s*Quickshell\.env\(envName\),\s*"
             r"Settings\.str\(settingKey\),\s*fallback\s*\)",
-            "_resolve must delegate with env first, then setting, then default",
+            "_resolve must delegate env first, then setting, then default",
         )
+
+    def test_command_logic_stays_pure_and_declares_pragma_library(self) -> None:
+        self.assertTrue(COMMAND_LOGIC_JS.exists(), "Services/CommandLogic.js must exist")
+        source = self.read(COMMAND_LOGIC_JS)
+        self.assertIn(".pragma library", source)
+        self.assertNotRegex(
+            source,
+            re.compile(r"^\s*import\b", re.MULTILINE),
+            "CommandLogic.js must stay free of Qt/Quickshell imports",
+        )
+        for symbol in (
+            "function resolve(",
+            "function probeArgv(",
+            "function failureMessage(",
+        ):
+            self.assertIn(symbol, source, f"CommandLogic.js must expose {symbol}")
+
+    def test_launch_detached_uses_exec_detached(self) -> None:
+        source = self.read(COMMANDS_QML)
+        body = re.search(r"function\s+launchDetached\([\s\S]*?\n    \}", source)
+        self.assertIsNotNone(body, "Commands.launchDetached must exist")
+        self.assertIn("Quickshell.execDetached(result.args)", body.group(0))
+
+    def test_launch_detached_probes_before_spawning(self) -> None:
+        source = self.read(COMMANDS_QML)
+        body = re.search(r"function\s+launchDetached\([\s\S]*?\n    \}", source)
+        self.assertIsNotNone(body, "Commands.launchDetached must exist")
+        block = body.group(0)
+        self.assertIn('CommandLogic.failureMessage("start"', block)
+        self.assertIn("_probe(", block)
+        self.assertLess(
+            block.index("_probe("),
+            block.index("Quickshell.execDetached("),
+            "launchDetached must probe the binary before spawning",
+        )
+        # La sonda usa el argv exacto de CommandLogic (nombre como parámetro).
+        probe_helper = re.search(r"function\s+_probe\([\s\S]*?\n    \}", source)
+        self.assertIsNotNone(probe_helper, "Commands must declare the probe helper")
+        self.assertIn("CommandLogic.probeArgv(name)", probe_helper.group(0))
+
+    def test_detached_call_sites_never_track_a_process(self) -> None:
+        tracked = re.compile(
+            r"Commands\.launch\(\s*Commands\.argv\(\s*"
+            r"Commands\.(?:audio|updates|copy|lock)\b"
+        )
+        for path in sorted(MODULES_DIR.rglob("*.qml")):
+            self.assertIsNone(
+                tracked.search(path.read_text(encoding="utf-8")),
+                f"{path.relative_to(PROJECT_ROOT)} must not track a detached command",
+            )
+        for rel in ("Bar/AudioWidget.qml", "Bar/UpdatesWidget.qml"):
+            source = self.read(MODULES_DIR / rel)
+            self.assertIn("Commands.launchDetached", source)
+            self.assertNotIn(
+                "Process {",
+                source,
+                f"{rel} must not declare its own tracked Process",
+            )
+        power = self.read(POWER_MENU_QML)
+        lock_branch = re.search(r"action\.tool === \"lock\"[\s\S]*?\n        \}", power)
+        self.assertIsNotNone(lock_branch, "PowerMenu must split the hyprlock branch")
+        self.assertIn("Commands.launchDetached", lock_branch.group(0))
+        self.assertNotIn("createObject", lock_branch.group(0))
 
     def test_shell_json_declares_every_new_key_as_null(self) -> None:
         values = json.loads(self.read(SHELL_JSON))
@@ -94,17 +158,20 @@ class ToolCommandContracts(unittest.TestCase):
 
     def test_migrated_modules_route_through_commands(self) -> None:
         expectations = {
-            "Bar/UpdatesWidget.qml": ("Commands.updates", "Commands.launch"),
+            "Bar/UpdatesWidget.qml": ("Commands.updates", "Commands.launchDetached"),
             "Launcher/Launcher.qml": (
                 "Commands.copy",
                 "Commands.find",
                 "Commands.notify",
+                "Commands.launchDetached",
             ),
             "PowerMenu/PowerMenu.qml": (
                 "Commands.lock",
                 "Commands.systemctl",
                 "Commands.hyprctl",
                 "Commands.notify",
+                "Commands.launch",
+                "Commands.launchDetached",
             ),
             "Dashboard/Dashboard.qml": (
                 "Commands.bluetooth",
@@ -112,6 +179,7 @@ class ToolCommandContracts(unittest.TestCase):
                 "Commands.lock",
                 "Commands.hyprctl",
                 "Commands.launch",
+                "Commands.launchDetached",
             ),
         }
         for rel, tokens in expectations.items():

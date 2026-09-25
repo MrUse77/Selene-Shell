@@ -632,14 +632,18 @@ PanelWindow {
                         anchors.centerIn: parent
                         spacing: 26
 
-                        // [icon, label, color, comando, args]
+                        // [icon, label, color, comando, args, survivesReload]
+                        // `survivesReload` es la decisión explícita de D2: las
+                        // acciones de sesión son fire-and-forget y sobrevivir es
+                        // gratis; `hyprctl dispatch exit` se queda tracked porque
+                        // su exit code es la señal del compositor.
                         Repeater {
                             model: [
-                                { icon: "󰐥", label: "Apagar", color: "urgent", cmd: Commands.systemctl, args: ["poweroff"] },
-                                { icon: "󰜉", label: "Reiniciar", color: "purple", cmd: Commands.systemctl, args: ["reboot"] },
-                                { icon: "󰤄", label: "Suspender", color: "cyan", cmd: Commands.systemctl, args: ["suspend"] },
-                                { icon: "󰍁", label: "Bloquear", color: "accent", cmd: Commands.lock, args: [] },
-                                { icon: "󰿅", label: "Salir", color: "warning", cmd: Commands.hyprctl, args: ["dispatch", "exit"] }
+                                { icon: "󰐥", label: "Apagar", color: "urgent", cmd: Commands.systemctl, args: ["poweroff"], survivesReload: true },
+                                { icon: "󰜉", label: "Reiniciar", color: "purple", cmd: Commands.systemctl, args: ["reboot"], survivesReload: true },
+                                { icon: "󰤄", label: "Suspender", color: "cyan", cmd: Commands.systemctl, args: ["suspend"], survivesReload: true },
+                                { icon: "󰍁", label: "Bloquear", color: "accent", cmd: Commands.lock, args: [], survivesReload: true },
+                                { icon: "󰿅", label: "Salir", color: "warning", cmd: Commands.hyprctl, args: ["dispatch", "exit"], survivesReload: false }
                             ]
 
                             delegate: Column {
@@ -661,9 +665,9 @@ PanelWindow {
                                     MouseArea {
                                         anchors.fill: parent
                                         cursorShape: Qt.PointingHandCursor
-                                        onClicked: Commands.launch(
-                                            Commands.argv(modelData.cmd, modelData.args),
-                                            "Selene session action failed")
+                                        onClicked: modelData.survivesReload
+                                            ? Commands.launchDetached(Commands.argv(modelData.cmd, modelData.args), "Selene session action failed")
+                                            : Commands.launch(Commands.argv(modelData.cmd, modelData.args), "Selene session action failed")
                                     }
                                 }
 

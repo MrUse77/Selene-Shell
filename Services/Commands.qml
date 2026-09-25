@@ -3,6 +3,7 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import "./CommandLogic.js" as CommandLogic
 import "./LauncherLogic.js" as LauncherLogic
 
 // Resolución de comandos de herramientas externas (#9).
@@ -11,7 +12,24 @@ import "./LauncherLogic.js" as LauncherLogic
 //   1. Variable de entorno neutra  Quickshell.env("<SHELL_*_COMMAND>")
 //   2. Setting del shell           Settings.str("<key>")   (shell.json)
 //   3. Default actual              comportamiento previo intacto
-// Un valor vacío o de tipo equivocado cae al siguiente nivel: nada rompe el clic.
+// La precedencia vive en CommandLogic.resolve (misma semántica documentada para
+// Theme.pick): un valor vacío o de tipo equivocado cae al siguiente nivel y nada
+// rompe el clic.
+//
+// Dos semánticas de lanzamiento, explícitas en el nombre (#25, D1):
+//   - launch(result, title): TRACKED. El Process es hijo del singleton, reporta
+//     started/exited/stderr y muere con el shell. Para comandos cortos donde el
+//     código de salida es la única señal real (polkit, consultas de stdout).
+//   - launchDetached(result, title, onResult): DETACHED.
+//     Quickshell.execDetached desacopla al hijo: sobrevive el reload y no reporta
+//     nada. Para lo que dura más que la shell o no debe morir con ella
+//     (hyprlock: un reload con la pantalla bloqueada no debe desbloquear).
+//
+// Por qué existe la sonda: un lanzamiento detached sin binario no tiene
+// FailedToStart que reportar, así que quedaría como clic mudo. Antes de spawnear
+// se sondea el binario (CommandLogic.probeArgv) y el fallo se reporta visible.
+// La sonda es en sí misma un Process tracked de vida útil de milisegundos: si el
+// shell recarga dentro de esa ventana, simplemente no se lanza nada.
 //
 // El valor resuelto es un string que se parsea a argv con LauncherLogic.parseCommand
 // (quotes y escapes soportados); NUNCA se interpola en `sh -c`. Un quote/escape
@@ -20,7 +38,11 @@ Item {
     id: root
 
     function _resolve(envName, settingKey, fallback) {
-        return Theme.pick(Quickshell.env(envName), Settings.str(settingKey), fallback);
+        return CommandLogic.resolve(
+            Quickshell.env(envName),
+            Settings.str(settingKey),
+            fallback
+        );
     }
 
     readonly property string audio: _resolve("SHELL_AUDIO_COMMAND", "audioCommand", "pavucontrol")
@@ -68,6 +90,46 @@ Item {
         // qmllint enable missing-property
     }
 
+    // Lanzamiento detached (D1): el hijo sobrevive el reload y no reporta nada.
+    // La sonda (D3) decide si hay binario antes de spawnear; `onResult` es
+    // opcional para los sitios fire-and-forget.
+    function launchDetached(result, title, onResult) {
+        const done = onResult || function() {};
+        if (!result.ok) {
+            notify(title, result.error);
+            done(false, result.error);
+            return;
+        }
+        _probe(result.args[0], available => {
+            if (!available) {
+                const message = CommandLogic.failureMessage("start", { program: result.args[0] });
+                notify(title, message);
+                done(false, message);
+                return;
+            }
+            Quickshell.execDetached(result.args);
+            done(true, "");
+        });
+    }
+
+    // Sonda de ejecutabilidad (D3): exit 0 significa disponible. Un
+    // FailedToStart (por ejemplo `sh` ausente) pasa por runningChanged sin
+    // onStarted/onExited, igual que un binario no ejecutable. `reported`
+    // garantiza una única llamada aunque las señales se solapen.
+    function _probe(name, callback) {
+        const proc = _probeLauncher.createObject(root, {
+            argv: CommandLogic.probeArgv(name),
+            probeCallback: callback
+        });
+        if (!proc) {
+            callback(false);
+            return;
+        }
+        // qmllint disable missing-property
+        proc.exec(proc.argv);
+        // qmllint enable missing-property
+    }
+
     Component {
         id: _launcher
         Process {
@@ -89,6 +151,33 @@ Item {
                     root.notify(proc.title, "Unable to start " + proc.argv[0]);
                     proc.destroy();
                 }
+            }
+        }
+    }
+
+    Component {
+        id: _probeLauncher
+        Process {
+            id: probeProc
+            required property var argv
+            required property var probeCallback
+            property bool startedOk: false
+            property bool reported: false
+            stdout: StdioCollector { id: probeOut }
+            stderr: StdioCollector { id: probeErr }
+            onStarted: probeProc.startedOk = true
+            onExited: exitCode => probeProc._report(exitCode === 0)
+            // FailedToStart (sh ausente) emite runningChanged sin onStarted/onExited.
+            onRunningChanged: {
+                if (!probeProc.running && !probeProc.startedOk)
+                    probeProc._report(false);
+            }
+            function _report(available) {
+                if (probeProc.reported) return;
+                probeProc.reported = true;
+                const callback = probeProc.probeCallback;
+                probeProc.destroy();
+                if (callback) callback(available);
             }
         }
     }
