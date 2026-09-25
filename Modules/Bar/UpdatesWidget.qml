@@ -1,5 +1,4 @@
 import QtQuick
-import Quickshell
 import "../../Services"
 import "../../Components"
 
@@ -38,6 +37,6 @@ BarWidget {
     MouseArea {
         anchors.fill: parent
         cursorShape: Qt.PointingHandCursor
-        onClicked: Quickshell.execDetached(["ghostty", "-e", "paru"])
+        onClicked: Commands.launch(Commands.argv(Commands.updates, []), "Selene updates failed")
     }
 }

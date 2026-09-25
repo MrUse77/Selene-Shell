@@ -23,11 +23,11 @@ PanelWindow {
     property var actionProcess: null
     readonly property bool operationBusy: OperationState.isBusy(actionState)
     readonly property var actions: [
-        { icon: "󰍁", label: "Bloquear", color: "accent", confirm: false, cmd: ["hyprlock"] },
-        { icon: "󰤄", label: "Suspender", color: "cyan", confirm: false, cmd: ["systemctl", "suspend"] },
-        { icon: "󰿅", label: "Salir", color: "warning", confirm: true, cmd: ["hyprctl", "dispatch", "exit"] },
-        { icon: "󰜉", label: "Reiniciar", color: "purple", confirm: true, cmd: ["systemctl", "reboot"] },
-        { icon: "󰐥", label: "Apagar", color: "urgent", confirm: true, cmd: ["systemctl", "poweroff"] }
+        { icon: "󰍁", label: "Bloquear", color: "accent", confirm: false, tool: "lock", cmd: Commands.lock, args: [] },
+        { icon: "󰤄", label: "Suspender", color: "cyan", confirm: false, tool: "suspend", cmd: Commands.systemctl, args: ["suspend"] },
+        { icon: "󰿅", label: "Salir", color: "warning", confirm: true, tool: "exit", cmd: Commands.hyprctl, args: ["dispatch", "exit"] },
+        { icon: "󰜉", label: "Reiniciar", color: "purple", confirm: true, tool: "reboot", cmd: Commands.systemctl, args: ["reboot"] },
+        { icon: "󰐥", label: "Apagar", color: "urgent", confirm: true, tool: "poweroff", cmd: Commands.systemctl, args: ["poweroff"] }
     ]
 
     screen: modelData
@@ -75,7 +75,7 @@ PanelWindow {
             content.forceActiveFocus();
             return;
         }
-        Quickshell.execDetached(["notify-send", "-a", "Selene", "Selene session action failed", message]);
+        Commands.notify("Selene session action failed", message);
     }
 
     function tint(colorName) {
@@ -99,6 +99,12 @@ PanelWindow {
 
     function execute(action) {
         if (!action || operationBusy) return;
+        const argv = Commands.argv(action.cmd, action.args);
+        if (!argv.ok) {
+            errorText = argv.error;
+            content.forceActiveFocus();
+            return;
+        }
         const launch = OperationState.begin(actionState);
         if (!launch.accepted) return;
         actionState = launch.state;
@@ -108,7 +114,7 @@ PanelWindow {
         const process = actionProcessComponent.createObject(root, {
             operationToken: launch.token,
             actionLabel: action.label,
-            closeOnStarted: action.cmd[0] === "hyprlock",
+            closeOnStarted: action.tool === "lock",
             sessionKind: session.kind,
             sessionScreen: session.screen,
             sessionGeneration: session.generation
@@ -125,7 +131,7 @@ PanelWindow {
         // marca exec como missing-property; es un falso positivo: el objeto
         // creado ES un Process (Quickshell.Io.Process) y expone exec().
         // qmllint disable missing-property
-        process.exec(action.cmd);
+        process.exec(argv.args);
         // qmllint enable missing-property
     }
 
