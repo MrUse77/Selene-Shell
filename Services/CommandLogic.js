@@ -1,6 +1,6 @@
 .pragma library
 
-// Lógica pura de comandos externos (#25, D6).
+// Lógica pura de comandos externos (#25/#26, D6).
 //
 // Sin imports de Qt ni de Quickshell: es ejecutable tal cual en qmltestrunner y
 // no toca el sistema. Sólo decide; el QML decide cuándo spawnear.
@@ -40,4 +40,28 @@ function failureMessage(event, detail) {
     default:
         return "";
     }
+}
+
+// Tope del log de diagnóstico (D4): es una superficie acotada, no un archivo
+// que crece sin límite.
+const LOG_MAX_LINES = 50;
+
+// Una sola línea por diagnóstico. El mensaje suele ser el stderr multilínea de
+// una herramienta; se colapsan \r y \n a un espacio y se recorta para que sea
+// imposible emitir más de un renglón.
+function logLine(stamp, title, message) {
+    const raw = "[" + stamp + "] " + title + " — " + (message == null ? "" : message);
+    return raw.replace(/[\r\n]+/g, " ").trim();
+}
+
+// Append acotado: agrega la línea nueva, conserva sólo las últimas `maxLines`
+// líneas no vacías y devuelve un texto que termina en exactamente un newline.
+function appendLog(existing, line, maxLines) {
+    const limit = maxLines > 0 ? maxLines : LOG_MAX_LINES;
+    const lines = String(existing == null ? "" : existing)
+        .split("\n")
+        .concat([String(line == null ? "" : line)])
+        .filter(function(entry) { return entry.trim() !== ""; });
+    const kept = lines.slice(Math.max(0, lines.length - limit));
+    return kept.length > 0 ? kept.join("\n") + "\n" : "";
 }

@@ -20,6 +20,7 @@ SHELL_JSON = PROJECT_ROOT / "shell.json"
 MODULES_DIR = PROJECT_ROOT / "Modules"
 LAUNCHER_QML = MODULES_DIR / "Launcher" / "Launcher.qml"
 POWER_MENU_QML = MODULES_DIR / "PowerMenu" / "PowerMenu.qml"
+DASHBOARD_QML = MODULES_DIR / "Dashboard" / "Dashboard.qml"
 
 # env name, shell.json key, default — the full resolution chain per command.
 CHAINS = {
@@ -79,8 +80,66 @@ class ToolCommandContracts(unittest.TestCase):
             "function resolve(",
             "function probeArgv(",
             "function failureMessage(",
+            "function logLine(",
+            "function appendLog(",
         ):
             self.assertIn(symbol, source, f"CommandLogic.js must expose {symbol}")
+        self.assertRegex(source, r"const\s+LOG_MAX_LINES\s*=\s*50\b")
+
+    def test_notify_probes_the_notifier_before_delivering(self) -> None:
+        source = self.read(COMMANDS_QML)
+        body = re.search(r"function\s+notify\([\s\S]*?\n    \}", source)
+        self.assertIsNotNone(body, "Commands.notify must exist")
+        block = body.group(0)
+        self.assertIn("_probe(", block)
+        self.assertIn("Quickshell.execDetached(", block)
+        self.assertLess(
+            block.index("_probe("),
+            block.index("Quickshell.execDetached("),
+            "notify must probe the notifier before delivering",
+        )
+        self.assertIn("_diagnose(", block)
+
+    def test_notify_failure_is_diagnosed_with_warn_and_bounded_log(self) -> None:
+        source = self.read(COMMANDS_QML)
+        diagnose = re.search(r"function\s+_diagnose\([\s\S]*?\n    \}", source)
+        self.assertIsNotNone(diagnose, "Commands must declare the _diagnose fallback")
+        block = diagnose.group(0)
+        self.assertIn("console.warn", block)
+        self.assertIn("CommandLogic.appendLog(", block)
+        self.assertIn("CommandLogic.LOG_MAX_LINES", block)
+        # La ruta de diagnóstico es terminal: no puede volver a notify.
+        self.assertNotIn("notify(", block)
+        # Log acotado en el state dir, sin ruido de errores si falta el archivo.
+        self.assertIn('Quickshell.statePath("commands.log")', source)
+        self.assertIn("FileView", source)
+        self.assertIn("printErrors: false", source)
+        self.assertIn("onLoadFailed", source)
+
+    def test_dashboard_bluetooth_poll_surfaces_the_unavailable_state(self) -> None:
+        source = self.read(DASHBOARD_QML)
+        refresh = re.search(r"function\s+refreshBt\([\s\S]*?\n    \}", source)
+        self.assertIsNotNone(refresh, "Dashboard.refreshBt must exist")
+        block = refresh.group(0)
+        self.assertIn(
+            "btUnavailable = true",
+            block,
+            "a non-parsing poll must surface the unavailable state, not a mute skip",
+        )
+        # El fallo del proceso del sondeo también cuenta (FailedToStart).
+        self.assertIn("startedOk", source)
+        self.assertIn("btUnavailable = true", source)
+        # Una salida no reconocida (exit 0 sin "Powered:") tampoco se lee como
+        # verdad: el sondeo se declara no disponible en vez de repetir el valor
+        # viejo, y la conclusión se difiere un turno para no pisar la última
+        # lectura pendiente del pipe.
+        self.assertIn("sawPowered", source)
+        exited = re.search(r"onExited:[\s\S]*?\n        \}", source)
+        self.assertIsNotNone(exited, "the poll must handle its exit code")
+        self.assertIn("sawPowered", exited.group(0))
+        self.assertIn("Qt.callLater", exited.group(0))
+        # La tarjeta muestra el estado no disponible en vez del valor viejo.
+        self.assertIn("Bluetooth unavailable", source)
 
     def test_launch_detached_uses_exec_detached(self) -> None:
         source = self.read(COMMANDS_QML)

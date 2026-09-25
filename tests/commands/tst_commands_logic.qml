@@ -110,4 +110,50 @@ TestCase {
             "Unable to start hyprlock"
         );
     }
+
+    // --- Log de diagnóstico acotado (D4) ---
+
+    function test_log_max_lines_is_the_documented_bound() {
+        compare(CommandLogic.LOG_MAX_LINES, 50);
+    }
+
+    // El mensaje realista es el stderr multilínea de una herramienta: el
+    // formato debe colapsarlo a un único renglón.
+    function test_log_line_flattens_a_multiline_message() {
+        const line = CommandLogic.logLine(
+            "2024-01-01T00:00:00Z",
+            "Selene command failed",
+            "line one\nline two\r\nline three"
+        );
+        compare(line, "[2024-01-01T00:00:00Z] Selene command failed — line one line two line three");
+        compare(line.split("\n").length, 1);
+        compare(line.indexOf("\r"), -1);
+        verify(line.indexOf("2024-01-01T00:00:00Z") !== -1, "la línea debe incluir el stamp");
+        verify(line.indexOf("Selene command failed") !== -1, "la línea debe incluir el título");
+        verify(line.indexOf("line three") !== -1, "la línea debe incluir el mensaje");
+    }
+
+    function test_log_line_trims_surrounding_whitespace() {
+        compare(CommandLogic.logLine("S", "T", "boom\n"), "[S] T — boom");
+        compare(CommandLogic.logLine("S", "T", "boom \n"), "[S] T — boom");
+        compare(CommandLogic.logLine("S", "T", "\n\n"), "[S] T —");
+    }
+
+    function test_append_log_handles_empty_and_missing_trailing_newline() {
+        compare(CommandLogic.appendLog("", "one", 50), "one\n");
+        compare(CommandLogic.appendLog("one", "two", 50), "one\ntwo\n");
+        compare(CommandLogic.appendLog("one\n", "two", 50), "one\ntwo\n");
+    }
+
+    function test_append_log_keeps_exactly_max_lines() {
+        compare(CommandLogic.appendLog("a\nb\n", "c", 3), "a\nb\nc\n");
+        verify(CommandLogic.appendLog("a\n", "b", 1).endsWith("\n"));
+    }
+
+    // El log es una superficie acotada: las líneas más viejas se descartan.
+    function test_append_log_drops_the_oldest_beyond_the_bound() {
+        compare(CommandLogic.appendLog("a\nb\nc\n", "d", 3), "b\nc\nd\n");
+        compare(CommandLogic.appendLog("a\nb\nc\n", "d", 2), "c\nd\n");
+        compare(CommandLogic.appendLog("a\n\n\nb\n", "c", 5), "a\nb\nc\n");
+    }
 }

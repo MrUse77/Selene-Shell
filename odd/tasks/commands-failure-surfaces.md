@@ -163,7 +163,7 @@ reconstruye a mano en `Modules/Launcher/Launcher.qml:243`.
       `tests/commands/tst_commands_logic.qml` para `resolve`, `probeArgv` (incluye
       que el nombre no viaja dentro del script) y la decisión de la sonda;
       contratos nuevos en `tests/test_commands_contracts.py`.
-- [ ] **T2 — Fallback del notificador y Bluetooth visible (#26).**
+- [x] **T2 — Fallback del notificador y Bluetooth visible (#26).**
       `Commands.notify` con sonda previa, `console.warn` y log acotado en
       `Quickshell.statePath("commands.log")` (D4). `Dashboard.refreshBt` con
       estado `btUnavailable` visible (D5). Tests de `logLine`/`appendLog` y
@@ -203,7 +203,7 @@ reconstruye a mano en `Modules/Launcher/Launcher.qml:243`.
 - [x] T1 — `Services/CommandLogic.js` (43 líneas), `launchDetached` + sonda en
       `Commands.qml`, migración de los cinco sitios detached, suite nueva en
       `tests/commands/tst_commands_logic.qml` (9 casos) y 4 contratos nuevos.
-- [ ] T2–T4.
+- [ ] T3–T4.
 
 ## Evidencia
 
@@ -221,12 +221,59 @@ reconstruye a mano en `Modules/Launcher/Launcher.qml:243`.
   → 96 tests OK; `qmltestrunner` (`/usr/lib/qt6/bin/`, Qt6) → commands 9/0,
   battery 16/0, geometry 10/0, notification-state 11/0, overlay-state 41/0;
   `qmllint --missing-property error` → `rc=0` en los 8 archivos tocados.
-- **Hallazgo del entorno**: el `qmltestrunner` de `/usr/bin` es de Qt5 y falla
-  con estas suites (rc=1 sin salida, también en las preexistentes); el bueno es
-  `/usr/lib/qt6/bin/qmltestrunner`, que es el que usa el CI.
+- **Hallazgo del entorno**: hay **dos** binarios con el mismo nombre y sólo uno
+  sirve. `/usr/bin/qmltestrunner` es de Qt5 (`libQt5QuickTest`) y falla mudo con
+  estas suites (rc=1, 0 bytes de salida, también en las preexistentes);
+  `/usr/bin/qmllint` es `qmllint 1.0`, una herramienta distinta. Los correctos
+  son los de Qt6 (`/usr/lib/qt6/bin/…`, 6.11.2), que son los que usa el CI.
 - **Sin verificar**: comportamiento en vivo (sonda ante `FailedToStart` y
   supervivencia real del hijo detached). Se infiere de la fuente de Quickshell,
   no se observó: no hubo runtime por autorización.
+
+### T2 (#26)
+
+- **Notificador**: `notify` sondea el binario antes de entregar; si no puede
+  correr (o el comando no parsea) va a `_diagnose`, que hace `console.warn` y
+  anexa una línea acotada a `Quickshell.statePath("commands.log")` con
+  `FileView.setText`. `CommandLogic.logLine` colapsa `\r`/`\n` para que el
+  stderr multilínea de una herramienta no pueda romper el formato de una línea
+  por evento, y `appendLog` conserva sólo las últimas `LOG_MAX_LINES` (50).
+- **Dashboard**: `btUnavailable` se declara cuando el argv no parsea, cuando el
+  proceso del sondeo no arranca (`FailedToStart`) y cuando sale distinto de 0.
+  El cierre del hueco que quedaba (ver «Tradeoffs») es salida 0 **sin ninguna
+  línea reconocida**, que se difiere un turno con `Qt.callLater` porque
+  `QProcess` puede emitir `finished` con datos todavía en el pipe.
+- **Gates (verificación independiente, `gentle-ai-verify`)**: `unittest
+  discover -s tests` → **99 tests, OK** (`rc=0`); `qmltestrunner` Qt6 → battery
+  16/0, **commands 15/0**, geometry 10/0, notification-state 11/0, overlay-state
+  41/0 (93 pasados, 0 fallados); `qmllint --missing-property error` (Qt6, 41
+  archivos) → `rc=0`, 70 warnings y 0 errores.
+- **Mutaciones (copia en `/tmp`, restaurada entre cada una)**: interpolación del
+  nombre en el script de la sonda → `tst_commands_logic` 2 fallos; precedencia de
+  `resolve` invertida → 1 fallo; `execDetached` antes de la sonda → contrato
+  `test_launch_detached_probes_before_spawning`; `_diagnose` sin `console.warn` →
+  contrato `test_notify_failure_is_diagnosed_with_warn_and_bounded_log`; tope del
+  log en 500 → fallan **suite y contrato**; sondeo de Bluetooth mudo → contrato
+  `test_dashboard_bluetooth_poll_surfaces_the_unavailable_state`. Ninguna
+  mutación sobrevivió.
+
+### Tradeoffs aceptados
+
+- **Todo lanzamiento detached pierde el exit code**, no sólo el de la sonda: un
+  `wl-copy` que falla al tomar la selección y un `hyprlock` que sale de inmediato
+  con error ya no producen señal. El caso `hyprlock` es el más sensible y queda
+  como el candidato natural de un follow-up que verifique el bloqueo con
+  `hyprctl` después de lanzar (no se hace acá para no meter una dependencia del
+  formato de Hyprland en este PR).
+- **`notify` es asincrónica** (primero la sonda): un reload dentro de esa
+  ventana de milisegundos pierde la notificación, el mismo tradeoff de
+  `launchDetached`, documentado en el encabezado del servicio.
+- **Log de diagnóstico**: si el archivo no se leyó todavía, la primera línea
+  arranca de un buffer vacío, así que se pierde el contenido previo del archivo
+  en ese único caso. Documentado en el código.
+- **PowerMenu `systemctl`**: se queda tracked a propósito, así que una denegación
+  de polkit sigue siendo visible en `errorText` a cambio de una ventana de
+  reload de milisegundos.
 
 ### Baseline
 

@@ -31,6 +31,9 @@ import "./LauncherLogic.js" as LauncherLogic
 // La sonda es en sí misma un Process tracked de vida útil de milisegundos: si el
 // shell recarga dentro de esa ventana, simplemente no se lanza nada.
 //
+// El fallo del notificador tampoco queda mudo (D4): console.warn más una línea
+// acotada en Quickshell.statePath("commands.log").
+//
 // El valor resuelto es un string que se parsea a argv con LauncherLogic.parseCommand
 // (quotes y escapes soportados); NUNCA se interpola en `sh -c`. Un quote/escape
 // incompleto devuelve ok:false y el fallo se reporta visible, sin ejecutar nada.
@@ -63,14 +66,48 @@ Item {
         return { ok: true, args: parsed.args.concat(extra || []), error: "" };
     }
 
-    // Notificación desktop: el mismo patrón que Launcher/PowerMenu ya usaban.
+    // Notificación desktop con degradación visible (D4). Se entrega después de
+    // que la sonda resuelve, así que es asíncrona: un reload dentro de esa ventana
+    // de milisegundos no entrega la notificación, el mismo tradeoff aceptado que
+    // launchDetached. Si el notificador no puede correr, el fallo no queda mudo:
+    // va a _diagnose.
     function notify(title, message) {
         const parsed = LauncherLogic.parseCommand(notifier);
-        if (parsed.ok) {
-            Quickshell.execDetached(parsed.args.concat([title, message]));
-        } else {
-            console.log("[selene:commands] notify no disponible:", parsed.error, "-", title, message);
+        if (!parsed.ok) {
+            _diagnose(title, message);
+            return;
         }
+        _probe(parsed.args[0], available => {
+            if (!available) {
+                _diagnose(title, message);
+                return;
+            }
+            Quickshell.execDetached(parsed.args.concat([title, message]));
+        });
+    }
+
+    // Fallback del notificador (D4): console.warn deja el mensaje completo en el
+    // log de Quickshell y el log acotado lo hace recuperable. La ruta es terminal:
+    // nunca vuelve a llamar a notify (evita recursión).
+    function _diagnose(title, message) {
+        const line = CommandLogic.logLine(new Date().toISOString(), title, message);
+        console.warn("[selene:commands]", line);
+        _diagBuffer = CommandLogic.appendLog(_diagBuffer, line, CommandLogic.LOG_MAX_LINES);
+        _diagLog.setText(_diagBuffer);
+    }
+
+    // Contenido ya cargado del log de diagnóstico. Una vez leído se preserva al
+    // appender; si el archivo todavía no se leyó, se arranca vacío (degradación
+    // aceptada, D4).
+    property string _diagBuffer: ""
+
+    FileView {
+        id: _diagLog
+        path: Quickshell.statePath("commands.log")
+        printErrors: false
+        onLoaded: root._diagBuffer = text()
+        onLoadFailed: root._diagBuffer = ""
+        Component.onCompleted: reload()
     }
 
     // Lanzamiento con degradación visible: parseo inválido, binario ausente o
