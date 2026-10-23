@@ -84,6 +84,7 @@ PanelWindow {
 
     onVisibleChanged: {
         if (visible) {
+            AppIcon.refreshIfStale();
             setMode(OverlayCoordinator.launcherMode);
         } else {
             invalidateThemeLoad();
@@ -793,7 +794,7 @@ PanelWindow {
                             anchors.verticalCenter: parent.verticalCenter
                             width: 30
                             height: 30
-                            source: Quickshell.iconPath(resultDelegate.modelData.icon ?? "", "application-x-executable")
+                            source: AppIcon.sourceFor(resultDelegate.modelData.icon ?? "")
                         }
                         Column {
                             anchors.verticalCenter: parent.verticalCenter
