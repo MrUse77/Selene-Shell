@@ -54,6 +54,17 @@ aplica mediante `~/.local/bin/moonarch/theme-selector --list|--apply ID`, que
 mantiene validación, swap atómico, reload y rollback. Tras aplicar, Selene
 recarga los tokens inmediatamente; el poll de archivos queda como respaldo.
 
+## Íconos del launcher
+
+El launcher no toma los íconos de aplicación del tema de íconos activo: los
+resuelve `Services/AppIcon.qml`, que indexa con un solo `find` los íconos que
+cada aplicación publica en `hicolor` y en `pixmaps` (según `XDG_DATA_HOME` y
+`XDG_DATA_DIRS`, exports de Flatpak incluidos) y le entrega la ruta absoluta a
+`IconImage`. La prioridad es SVG escalable, después el raster de mayor tamaño y
+al final los simbólicos monocromo. Si la aplicación no publica ícono propio se
+conserva el ícono del tema y, como último recurso, `application-x-executable`.
+El índice se refresca al abrir el launcher, como mucho una vez por minuto.
+
 ## Rollback
 
 Waybar, Rofi, Eww y Dunst ya no están en el repositorio: su configuración se
