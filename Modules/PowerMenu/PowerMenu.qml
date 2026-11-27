@@ -53,14 +53,6 @@ PanelWindow {
         return OverlayCoordinator.captureSession("power", modelData);
     }
 
-    function processSessionMatches(process) {
-        return OverlayCoordinator.sessionMatches(
-            process.sessionKind,
-            process.sessionScreen,
-            process.sessionGeneration
-        );
-    }
-
     function closeProcessSession(process) {
         return OverlayCoordinator.closeSession(
             process.sessionKind,
@@ -69,13 +61,21 @@ PanelWindow {
         );
     }
 
-    function reportProcessFailure(process, message) {
-        if (processSessionMatches(process) && visible) {
+    function reportSessionFailure(session, message) {
+        if (OverlayCoordinator.sessionMatches(session.kind, session.screen, session.generation) && visible) {
             errorText = message;
             content.forceActiveFocus();
             return;
         }
         Commands.notify("Selene session action failed", message);
+    }
+
+    function reportProcessFailure(process, message) {
+        reportSessionFailure({
+            kind: process.sessionKind,
+            screen: process.sessionScreen,
+            generation: process.sessionGeneration
+        }, message);
     }
 
     function tint(colorName) {
@@ -111,10 +111,31 @@ PanelWindow {
         pendingAction = null;
         errorText = "Running " + action.label + "…";
         const session = currentSession();
+
+        // hyprlock sale detached: el hijo no debe morir con un reload (era el bug
+        // de seguridad de #25) y el cierre del menú queda atado al resultado de
+        // la sonda (D3). Tradeoff aceptado: al ser fire-and-forget, un hyprlock
+        // que sale de inmediato con error ya no produce señal.
+        if (action.tool === "lock") {
+            const lockToken = launch.token;
+            Commands.launchDetached(argv, "Selene session action failed", function(ok, message) {
+                if (lockToken !== actionState.active) return;
+                actionState = OperationState.finish(actionState, lockToken).state;
+                if (ok) {
+                    OverlayCoordinator.closeSession(session.kind, session.screen, session.generation);
+                    return;
+                }
+                reportSessionFailure(session, message);
+            });
+            return;
+        }
+
+        // systemctl y hyprctl se quedan tracked (sin cambio, D2): la denegación
+        // de polkit sólo se ve en el exit code y su errorText es la superficie
+        // del módulo; la ventana de reload es de milisegundos.
         const process = actionProcessComponent.createObject(root, {
             operationToken: launch.token,
             actionLabel: action.label,
-            closeOnStarted: action.tool === "lock",
             sessionKind: session.kind,
             sessionScreen: session.screen,
             sessionGeneration: session.generation
@@ -141,26 +162,11 @@ PanelWindow {
         if (!live.accepted) return;
         process.startedSuccessfully = true;
         actionStartupWatchdog.stop();
-        if (process.closeOnStarted) {
-            actionState = OperationState.finish(live.state, process.operationToken).state;
-            actionProcess = null;
-            closeProcessSession(process);
-        } else {
-            actionState = live.state;
-        }
+        actionState = live.state;
     }
 
     function actionExited(process, exitCode) {
         if (!process.startedSuccessfully) return;
-        if (process.closeOnStarted) {
-            if (exitCode !== 0) {
-                reportProcessFailure(
-                    process,
-                    process.failureText(process.actionLabel + " failed with exit code " + exitCode)
-                );
-            }
-            return;
-        }
         if (actionProcess !== process || process.operationToken !== actionState.active) return;
         actionStartupWatchdog.stop();
         actionState = OperationState.finish(actionState, process.operationToken).state;
@@ -181,7 +187,6 @@ PanelWindow {
             id: processInstance
             required property int operationToken
             required property string actionLabel
-            required property bool closeOnStarted
             required property string sessionKind
             required property var sessionScreen
             required property int sessionGeneration

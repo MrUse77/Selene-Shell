@@ -51,27 +51,73 @@ PanelWindow {
 
     // ---- Bluetooth ----
     property bool btOn: false
+    // D5: una lectura fallida no puede leerse como el último valor conocido.
+    property bool btUnavailable: false
 
     readonly property Process btProc: Process {
+        // Mismo guard que Services/Commands.qml: FailedToStart emite
+        // runningChanged sin onStarted/onExited, y sin lectura no hay verdad.
+        property bool startedOk: false
+        // Una salida que no reconocemos tampoco es una lectura: si `bluetoothctl
+        // show` sale 0 y no dice nada que entendamos, la tarjeta lo declara en
+        // vez de repetir el último valor conocido (D5).
+        property bool sawPowered: false
         stdout: SplitParser {
             onRead: data => {
-                if (data.includes("Powered: yes")) root.btOn = true;
-                else if (data.includes("Powered: no")) root.btOn = false;
+                if (data.includes("Powered: yes")) {
+                    root.btOn = true;
+                    root.btUnavailable = false;
+                    btProc.sawPowered = true;
+                } else if (data.includes("Powered: no")) {
+                    root.btOn = false;
+                    root.btUnavailable = false;
+                    btProc.sawPowered = true;
+                }
             }
+        }
+        onStarted: btProc.startedOk = true
+        onExited: exitCode => {
+            if (exitCode !== 0) {
+                root.btUnavailable = true;
+                return;
+            }
+            // Diferido un turno del event loop: QProcess puede emitir finished
+            // con datos todavía en el pipe, así que la última lectura pendiente
+            // tiene que aterrizar antes de concluir que no hubo ninguna.
+            Qt.callLater(() => {
+                if (!btProc.sawPowered) root.btUnavailable = true;
+            });
+        }
+        onRunningChanged: {
+            if (!btProc.running && !btProc.startedOk)
+                root.btUnavailable = true;
         }
     }
 
     function refreshBt() {
-        // Sondeo pasivo: un comando inválido se omite acá; el clic (toggleBt)
-        // es quien reporta la falla de forma visible.
+        // Sondeo pasivo: si el comando no parsea no hay lectura posible, así que
+        // la tarjeta lo dice en vez de repetir el último valor (D5).
         const btArgv = Commands.argv(Commands.bluetooth, ["show"]);
-        if (btArgv.ok) btProc.exec(btArgv.args);
+        if (!btArgv.ok) {
+            root.btUnavailable = true;
+            return;
+        }
+        // Falso positivo: qmllint tipa btProc como Process y no ve las
+        // propiedades declaradas inline en el objeto.
+        // qmllint disable missing-property
+        btProc.startedOk = false;
+        btProc.sawPowered = false;
+        // qmllint enable missing-property
+        btProc.exec(btArgv.args);
     }
 
     function toggleBt() {
         const btArgv = Commands.argv(Commands.bluetooth, ["power", btOn ? "on" : "off"]);
         Commands.launch(btArgv, "Selene bluetooth failed");
-        if (!btArgv.ok) return;
+        if (!btArgv.ok) {
+            root.btUnavailable = true;
+            return;
+        }
         btOn = !btOn;
         Qt.callLater(refreshBt);
     }
@@ -182,13 +228,16 @@ PanelWindow {
 
                             Text {
                                 text: root.btOn ? "󰂯" : "󰂲"
-                                color: root.btOn ? Theme.cyan : Theme.textDim
+                                color: root.btUnavailable ? Theme.textDim
+                                     : root.btOn ? Theme.cyan : Theme.textDim
                                 font.family: Theme.font
                                 font.pixelSize: 17
                             }
                             Text {
-                                text: root.btOn ? "Bluetooth" : "Bluetooth off"
-                                color: root.btOn ? Theme.text : Theme.textDim
+                                text: root.btUnavailable ? "Bluetooth unavailable"
+                                     : root.btOn ? "Bluetooth" : "Bluetooth off"
+                                color: root.btUnavailable ? Theme.textDim
+                                     : root.btOn ? Theme.text : Theme.textDim
                                 font.family: Theme.font
                                 font.pixelSize: 12
                             }
@@ -632,14 +681,18 @@ PanelWindow {
                         anchors.centerIn: parent
                         spacing: 26
 
-                        // [icon, label, color, comando, args]
+                        // [icon, label, color, comando, args, survivesReload]
+                        // `survivesReload` es la decisión explícita de D2: las
+                        // acciones de sesión son fire-and-forget y sobrevivir es
+                        // gratis; `hyprctl dispatch exit` se queda tracked porque
+                        // su exit code es la señal del compositor.
                         Repeater {
                             model: [
-                                { icon: "󰐥", label: "Apagar", color: "urgent", cmd: Commands.systemctl, args: ["poweroff"] },
-                                { icon: "󰜉", label: "Reiniciar", color: "purple", cmd: Commands.systemctl, args: ["reboot"] },
-                                { icon: "󰤄", label: "Suspender", color: "cyan", cmd: Commands.systemctl, args: ["suspend"] },
-                                { icon: "󰍁", label: "Bloquear", color: "accent", cmd: Commands.lock, args: [] },
-                                { icon: "󰿅", label: "Salir", color: "warning", cmd: Commands.hyprctl, args: ["dispatch", "exit"] }
+                                { icon: "󰐥", label: "Apagar", color: "urgent", cmd: Commands.systemctl, args: ["poweroff"], survivesReload: true },
+                                { icon: "󰜉", label: "Reiniciar", color: "purple", cmd: Commands.systemctl, args: ["reboot"], survivesReload: true },
+                                { icon: "󰤄", label: "Suspender", color: "cyan", cmd: Commands.systemctl, args: ["suspend"], survivesReload: true },
+                                { icon: "󰍁", label: "Bloquear", color: "accent", cmd: Commands.lock, args: [], survivesReload: true },
+                                { icon: "󰿅", label: "Salir", color: "warning", cmd: Commands.hyprctl, args: ["dispatch", "exit"], survivesReload: false }
                             ]
 
                             delegate: Column {
@@ -661,9 +714,9 @@ PanelWindow {
                                     MouseArea {
                                         anchors.fill: parent
                                         cursorShape: Qt.PointingHandCursor
-                                        onClicked: Commands.launch(
-                                            Commands.argv(modelData.cmd, modelData.args),
-                                            "Selene session action failed")
+                                        onClicked: modelData.survivesReload
+                                            ? Commands.launchDetached(Commands.argv(modelData.cmd, modelData.args), "Selene session action failed")
+                                            : Commands.launch(Commands.argv(modelData.cmd, modelData.args), "Selene session action failed")
                                     }
                                 }
 

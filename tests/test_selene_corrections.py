@@ -408,7 +408,28 @@ class SeleneCorrectionContracts(unittest.TestCase):
             self.assertRegex(source, r"if\s*\([^)]*(?:Busy|busy)[^)]*\)\s*return")
             self.assertRegex(source, re.compile(r"Timer\s*\{[^}]*startup", re.DOTALL | re.IGNORECASE))
             self.assertRegex(source, r"(?:===|!==)\s*process", "Completions must verify process identity")
-        self.assertIn("closeOnStarted", power, "hyprlock needs successful-start close semantics")
+        self.assertNotIn(
+            "closeOnStarted", power,
+            "el cierre atado a onStarted de hyprlock ya no existe (#25)",
+        )
+        # hyprlock va detached: la sonda (D3) decide y el cierre del menú queda
+        # atado a su resultado. Si hyprlock no puede correr, el menú NO se cierra
+        # y el módulo reporta el error por errorText.
+        self.assertIn("Commands.launchDetached", power)
+        lock_branch = re.search(r"action\.tool === \"lock\"[\s\S]*?\n        \}", power)
+        self.assertIsNotNone(lock_branch, "PowerMenu debe aislar la rama de hyprlock")
+        branch = lock_branch.group(0)
+        self.assertIn("Commands.launchDetached", branch)
+        self.assertRegex(
+            branch,
+            r"if\s*\(ok\)\s*\{[\s\S]*?closeSession\([\s\S]*?return;[\s\S]*?\}\s*reportSessionFailure\(",
+            "sólo una sonda exitosa cierra el menú; el fallo reporta el error",
+        )
+        self.assertRegex(
+            power,
+            r"function\s+reportSessionFailure[\s\S]*?errorText\s*=\s*message",
+            "el fallo de la sonda de hyprlock debe verse en errorText",
+        )
         self.assertRegex(power, r"enabled:\s*!root\.operationBusy")
         self.assertRegex(launcher, r"enabled:\s*!root\.acceptanceBusy")
 

@@ -100,5 +100,12 @@ function parseCommand(input) {
     if (quote !== "") return { ok: false, args: [], error: "Unterminated quote in command" };
     if (started) args.push(token);
     if (args.length === 0) return { ok: false, args: [], error: "Enter a command to run" };
+    return okResult(args);
+}
+
+// Único productor del shape de éxito {ok, args, error} (D6, issue #27): lo usan
+// Commands.argv y el selector de temas, así renombrar un campo rompe en un solo
+// lugar en vez de dejar copias fabricadas a mano.
+function okResult(args) {
     return { ok: true, args: args, error: "" };
 }

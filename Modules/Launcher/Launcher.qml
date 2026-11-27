@@ -241,7 +241,7 @@ PanelWindow {
             : "Loading validated MoonArch themes…";
         const findArgv = themeListReadOnly
             ? Commands.argv(Commands.find, [Theme.themesRoot, "-mindepth", "1", "-maxdepth", "1", "-type", "d", "-printf", "%f\\n"])
-            : { ok: true, args: [], error: "" };
+            : LauncherLogic.okResult([]);
         if (!findArgv.ok) {
             themesLoading = false;
             statusError = true;
@@ -359,7 +359,9 @@ PanelWindow {
                     statusText = copied.error;
                     return;
                 }
-                Commands.launch(copied, "Selene command failed");
+                // Detached: wl-copy vive para ser dueño de la selección y
+                // matarlo la pierde; debe sobrevivir un reload del shell (#25, D2).
+                Commands.launchDetached(copied, "Selene command failed");
                 console.log("[selene:launcher] copied calculator result");
                 close();
             } else {
