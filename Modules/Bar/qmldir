@@ -1,6 +1,7 @@
 Bar Bar.qml
 CalendarPopup CalendarPopup.qml
 HistoryPopup HistoryPopup.qml
+AudioPickerPopup AudioPickerPopup.qml
 NotifsWidget NotifsWidget.qml
 Workspaces Workspaces.qml
 WindowTitle WindowTitle.qml

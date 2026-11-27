@@ -2,11 +2,12 @@ import QtQuick
 import "../../Services"
 import "../../Components"
 
-// Volumen del sink por defecto: clic abre el mezclador (Commands.audio), rueda ajusta.
+// Volumen del sink por defecto: clic abre el selector de dispositivo, rueda ajusta.
 BarWidget {
     id: root
 
     hoverable: true
+    active: ShellState.audioPickerOpen && ShellState.audioPickerScreen === (screen?.name ?? "")
 
     readonly property string icon:
         Audio.muted || Audio.percent === 0 ? "󰸈"
@@ -31,6 +32,7 @@ BarWidget {
         }
 
         Text {
+            id: value
             anchors.verticalCenter: parent.verticalCenter
             text: (Audio.muted ? "×" : Audio.percent) + "%"
             color: Theme.textDim
@@ -42,7 +44,13 @@ BarWidget {
     MouseArea {
         anchors.fill: parent
         cursorShape: Qt.PointingHandCursor
-        onClicked: Commands.launch(Commands.argv(Commands.audio, []), "Selene audio failed")
+        onClicked: {
+            // El popup se centra en el número del volumen. mapToItem(null) da
+            // coordenadas de la superficie de la barra, que está insetada por
+            // barMarginSide; se suma para pasar un centro de pantalla.
+            const centerX = value.mapToItem(null, value.width / 2, 0).x + Geometry.barMarginSide;
+            ShellState.toggleAudioPicker(screen?.name ?? "", centerX);
+        }
     }
 
     WheelHandler {

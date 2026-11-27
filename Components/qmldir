@@ -4,3 +4,4 @@ Gauge Gauge.qml
 StyledSlider StyledSlider.qml
 MoonDisc MoonDisc.qml
 BarWidget BarWidget.qml
+AudioPanel AudioPanel.qml

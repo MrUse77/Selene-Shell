@@ -15,6 +15,13 @@ Item {
     property bool historyOpen: false
     property string historyScreen: ""
 
+    // Selector de dispositivo de audio por barra
+    property bool audioPickerOpen: false
+    property string audioPickerScreen: ""
+    // Centro del número de volumen en coordenadas de pantalla: el popup se
+    // centra ahí en vez de alinearse a un borde.
+    property real audioPickerCenterX: 0
+
     // Notificaciones
     property bool dnd: false
     property int unread: 0
@@ -37,6 +44,16 @@ Item {
         } else {
             historyScreen = screenName;
             historyOpen = true;
+        }
+    }
+
+    function toggleAudioPicker(screenName, centerX) {
+        if (audioPickerOpen && audioPickerScreen === screenName) {
+            audioPickerOpen = false;
+        } else {
+            audioPickerScreen = screenName;
+            audioPickerCenterX = centerX ?? 0;
+            audioPickerOpen = true;
         }
     }
 
