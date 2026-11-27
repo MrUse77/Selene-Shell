@@ -19,9 +19,13 @@ Item {
     // Filas del selector de dispositivo: los sinks de hardware, con la marca
     // del que WirePlumber tiene como preferido. Se recalcula cuando PipeWire
     // agrega o quita nodos (`values` notifica).
+    // Falso positivo: UntypedObjectModel.values existe en runtime pero
+    // Quickshell no lo declara en sus .qmltypes.
+    // qmllint disable missing-property
     readonly property var sinks: AudioDeviceLogic.sinkEntries(
         Pipewire.nodes.values,
         Pipewire.preferredDefaultAudioSink ?? Pipewire.defaultAudioSink)
+    // qmllint enable missing-property
 
     // Las propiedades de audio son inválidas sin este tracker (requisito
     // documentado de PwNodeAudio).

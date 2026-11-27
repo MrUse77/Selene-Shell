@@ -39,10 +39,14 @@ PanelWindow {
         const maxLeft = screenWidth - implicitWidth - edgeInset;
         return Math.round(Math.max(edgeInset, Math.min(maxLeft, desired)));
     }
+    // Falso positivo: PanelWindow.margins existe en runtime pero Quickshell no
+    // lo declara en sus .qmltypes.
+    // qmllint disable missing-property
     margins {
         top: Geometry.panelTop(gapBelowBar)
         left: leftMargin
     }
+    // qmllint enable missing-property
     implicitWidth: panel.implicitWidth
     implicitHeight: panel.implicitHeight
     color: "transparent"
