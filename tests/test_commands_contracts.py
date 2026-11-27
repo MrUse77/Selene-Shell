@@ -94,7 +94,6 @@ class ToolCommandContracts(unittest.TestCase):
 
     def test_migrated_modules_route_through_commands(self) -> None:
         expectations = {
-            "Bar/AudioWidget.qml": ("Commands.audio", "Commands.launch"),
             "Bar/UpdatesWidget.qml": ("Commands.updates", "Commands.launch"),
             "Launcher/Launcher.qml": (
                 "Commands.copy",
@@ -128,8 +127,9 @@ class ToolCommandContracts(unittest.TestCase):
         self.assertIn("statusText = findArgv.error;", launcher)
         self.assertIn("errorText = argv.error;", power)
         # Widgets without inline status notify through the shared launcher.
+        # El volumen ya no lanza un comando externo: abre el selector de
+        # dispositivo propio (Modules/Bar/AudioPickerPopup.qml).
         for rel in (
-            "Bar/AudioWidget.qml",
             "Bar/UpdatesWidget.qml",
             "Dashboard/Dashboard.qml",
         ):

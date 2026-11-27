@@ -36,6 +36,12 @@ ShellRoot {
 
     Variants {
         model: Quickshell.screens
+
+        AudioPickerPopup {}
+    }
+
+    Variants {
+        model: Quickshell.screens
         Launcher {}
     }
 

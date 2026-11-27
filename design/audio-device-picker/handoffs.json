@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "chosen": "03-encabezado-grande.html",
+  "handoffs": {
+    "03-encabezado-grande.html": {
+      "status": "implemented",
+      "queued": false,
+      "sentAt": "2026-11-27T12:22:06.711Z",
+      "startedAt": null,
+      "implementedAt": "2026-11-27T12:22:10.906Z",
+      "note": "Implementado en Modules/Bar/AudioPickerPopup.qml: hero con la salida activa (icono, nombre, detalle técnico), slider de volumen con mute, separador y selector compacto con navegación por teclado. Carga limpia en qs; 102 tests OK."
+    }
+  }
+}
