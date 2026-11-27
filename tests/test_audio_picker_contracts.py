@@ -168,6 +168,14 @@ class AudioPickerContracts(unittest.TestCase):
             "componentes de Components sin registrar en su qmldir",
         )
 
+    def test_dashboard_reuses_the_shared_panel(self):
+        """La tarjeta de audio del dashboard es el mismo componente del popup."""
+        source = strip_comments(read("Modules/Dashboard/Dashboard.qml"))
+        self.assertIn("AudioPanel {", source)
+        self.assertIn("showKeyboardHint: false", source)
+        self.assertNotIn("Audio.setVolume(", source,
+                         "el slider de audio inline ya no vive en el dashboard")
+
     def test_audio_service_exposes_sinks_and_selection(self):
         source = strip_comments(read("Services/Audio.qml"))
         self.assertRegex(source, r"readonly property var sinks:")

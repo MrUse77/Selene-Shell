@@ -231,55 +231,17 @@ PanelWindow {
                     }
                 }
 
-                // ---- Volumen ----
+                // ---- Volumen y salida de audio ----
+                // Mismo componente que el popup de la barra. Sin recordatorio de
+                // teclas: acá no hay atajos que lo respalden.
                 Card {
                     width: parent.width
-                    height: 66
+                    height: audioPanel.implicitHeight
 
-                    Row {
-                        anchors.verticalCenter: parent.verticalCenter
-                        anchors.left: parent.left
-                        anchors.leftMargin: 16
-                        anchors.right: parent.right
-                        anchors.rightMargin: 16
-                        spacing: 12
-
-                        Text {
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: Audio.muted || Audio.percent === 0 ? "󰸈"
-                                : Audio.percent < 34 ? "󰕿"
-                                : Audio.percent < 67 ? "󰖀"
-                                : "󰕾"
-                            color: Audio.muted ? Theme.urgent : Theme.purple
-                            font.family: Theme.font
-                            font.pixelSize: 18
-
-                            MouseArea {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: Audio.toggleMute()
-                            }
-                        }
-
-                        StyledSlider {
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: parent.width - 130
-                            value: Math.min(1, Audio.volume)
-                            fillColor: Audio.muted ? Theme.urgent : Theme.purple
-                            onMoved: v => {
-                                Audio.setVolume(v);
-                                if (Audio.muted && v > 0) Audio.toggleMute();
-                            }
-                        }
-
-                        Text {
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: Audio.percent + "%"
-                            color: Theme.text
-                            font.family: Theme.fontMono
-                            font.pixelSize: 13
-                            font.bold: true
-                        }
+                    AudioPanel {
+                        id: audioPanel
+                        anchors.fill: parent
+                        showKeyboardHint: false
                     }
                 }
 
