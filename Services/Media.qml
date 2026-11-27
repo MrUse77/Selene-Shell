@@ -11,7 +11,11 @@ Item {
 
     property string _explicitPlayerId: ""
 
+    // Falso positivo: UntypedObjectModel.values existe en runtime pero
+    // Quickshell no lo declara en sus .qmltypes.
+    // qmllint disable missing-property
     readonly property var players: MediaLogic.sortedPlayers(Mpris.players.values)
+    // qmllint enable missing-property
     readonly property int playerCount: players.length
     readonly property bool hasPlayers: playerCount > 0
     readonly property var player: MediaLogic.choosePlayer(players, _explicitPlayerId)

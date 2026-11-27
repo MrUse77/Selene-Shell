@@ -27,11 +27,15 @@ PanelWindow {
     }
     // Gap de diseño bajo la barra: 2 reproduce el top previo (10 + 44 + 2 = 56).
     readonly property int gapBelowBar: 2
+    // Falso positivo: PanelWindow.margins existe en runtime pero Quickshell no
+    // lo declara en sus .qmltypes.
+    // qmllint disable missing-property
     margins {
         top: Geometry.panelTop(gapBelowBar)
         right: Geometry.barMarginSide
         bottom: Geometry.barMarginSide
     }
+    // qmllint enable missing-property
     implicitWidth: 470
     color: "transparent"
     visible: OverlayCoordinator.dashboardOpen && OverlayCoordinator.targetScreen === modelData

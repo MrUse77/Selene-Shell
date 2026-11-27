@@ -9,7 +9,11 @@ import "../../Components"
 BarWidget {
     id: root
 
+    // Falso positivo: UntypedObjectModel.values existe en runtime pero
+    // Quickshell no lo declara en sus .qmltypes.
+    // qmllint disable missing-property
     readonly property var items: SystemTray.items.values
+    // qmllint enable missing-property
 
     visible: items.length > 0
     height: 32
