@@ -102,8 +102,12 @@ PanelWindow {
             root.btUnavailable = true;
             return;
         }
+        // Falso positivo: qmllint tipa btProc como Process y no ve las
+        // propiedades declaradas inline en el objeto.
+        // qmllint disable missing-property
         btProc.startedOk = false;
         btProc.sawPowered = false;
+        // qmllint enable missing-property
         btProc.exec(btArgv.args);
     }
 
