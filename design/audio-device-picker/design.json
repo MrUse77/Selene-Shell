@@ -1,0 +1,27 @@
+{
+  "title": "Selector de dispositivo de audio",
+  "brief": "Popup anclado bajo el indicador de volumen de la barra de Selene Shell (Quickshell/Hyprland) para elegir la salida de audio y ajustar su volumen.",
+  "artboards": [
+    {
+      "file": "01-lista-compacta.html",
+      "title": "Lista compacta",
+      "tradeoff": "Densa y rápida de escanear; jerarquía baja y sin control de volumen por dispositivo.",
+      "width": 900,
+      "height": 640
+    },
+    {
+      "file": "02-medidor-por-dispositivo.html",
+      "title": "Medidor por dispositivo",
+      "tradeoff": "Muestra y ajusta el volumen de cada salida sin abrir el mezclador; más alto y con más controles por fila.",
+      "width": 900,
+      "height": 640
+    },
+    {
+      "file": "03-encabezado-grande.html",
+      "title": "Encabezado grande + lista",
+      "tradeoff": "Optimiza el caso frecuente (volumen y mute del activo) y hace explícito qué suena; ocupa más alto y pide más decisiones en pantalla.",
+      "width": 900,
+      "height": 640
+    }
+  ]
+}
