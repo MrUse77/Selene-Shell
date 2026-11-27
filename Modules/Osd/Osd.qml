@@ -16,7 +16,11 @@ PanelWindow {
     anchors.bottom: true
     // Declarable por cadena (env -> shell.json -> default); el default 90
     // reproduce el layout previo.
+    // Falso positivo: PanelWindow.margins existe en runtime pero Quickshell no
+    // lo declara en sus .qmltypes.
+    // qmllint disable missing-property
     margins.bottom: Geometry.osdMarginBottom
+    // qmllint enable missing-property
     implicitWidth: 340
     implicitHeight: 56
     color: "transparent"

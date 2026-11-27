@@ -18,11 +18,15 @@ PanelWindow {
         left: true
         right: true
     }
+    // Falso positivo: PanelWindow.margins existe en runtime pero Quickshell no
+    // lo declara en sus .qmltypes.
+    // qmllint disable missing-property
     margins {
         top: Geometry.barMarginTop
         left: Geometry.barMarginSide
         right: Geometry.barMarginSide
     }
+    // qmllint enable missing-property
     implicitHeight: Geometry.barHeight
     // La zona exclusiva ES la altura de la barra: no es un valor independiente
     // que pueda desincronizarse del alto real.

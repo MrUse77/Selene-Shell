@@ -27,10 +27,14 @@ PanelWindow {
     // previo (10 + 44 + 4 = 58) y el right previo (14 + 4 = 18).
     readonly property int gapBelowBar: 4
     readonly property int rightInset: 4
+    // Falso positivo: PanelWindow.margins existe en runtime pero Quickshell no
+    // lo declara en sus .qmltypes.
+    // qmllint disable missing-property
     margins {
         top: Geometry.panelTop(gapBelowBar)
         right: Geometry.panelRight(rightInset)
     }
+    // qmllint enable missing-property
     implicitWidth: 380
     implicitHeight: 420
     color: "transparent"

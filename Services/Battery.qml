@@ -9,11 +9,15 @@ import "BatteryLogic.js" as BatteryLogic
 Item {
     id: root
 
+    // Falso positivo: UntypedObjectModel.values existe en runtime pero
+    // Quickshell no lo declara en sus .qmltypes.
+    // qmllint disable missing-property
     readonly property var _projection: BatteryLogic.project(
         UPower.devices.values,
         UPower.displayDevice,
         UPower.onBattery
     )
+    // qmllint enable missing-property
 
     readonly property bool available: _projection.available
     readonly property int batteryCount: _projection.batteryCount
