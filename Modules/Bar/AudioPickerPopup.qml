@@ -33,7 +33,11 @@ PanelWindow {
     readonly property int gapBelowBar: 4
     readonly property int edgeInset: 8
     readonly property real centerX: ShellState.audioPickerCenterX
+    // Falso positivo: QuickshellScreenInfo.width existe en runtime pero
+    // Quickshell no lo declara en sus .qmltypes.
+    // qmllint disable missing-property
     readonly property real screenWidth: screen ? screen.width : 0
+    // qmllint enable missing-property
     readonly property int leftMargin: {
         const desired = centerX - implicitWidth / 2;
         const maxLeft = screenWidth - implicitWidth - edgeInset;
