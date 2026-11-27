@@ -26,6 +26,7 @@ POWER_MENU_QML = PROJECT_ROOT / "Modules" / "PowerMenu" / "PowerMenu.qml"
 LAUNCHER_LOGIC_JS = PROJECT_ROOT / "Services" / "LauncherLogic.js"
 OPERATION_STATE_JS = PROJECT_ROOT / "Services" / "OperationState.js"
 THEME_QML = PROJECT_ROOT / "Services" / "Theme.qml"
+APP_ICON_QML = PROJECT_ROOT / "Services" / "AppIcon.qml"
 SETTINGS_QML = PROJECT_ROOT / "Services" / "Settings.qml"
 WORKSPACES_QML = PROJECT_ROOT / "Modules" / "Bar" / "Workspaces.qml"
 HARDWARE_QML = PROJECT_ROOT / "Services" / "Hardware.qml"
@@ -181,10 +182,29 @@ class SeleneCorrectionContracts(unittest.TestCase):
         source = LAUNCHER_QML.read_text(encoding="utf-8")
         self.assertRegex(
             source,
-            r"source\s*:\s*Quickshell\.iconPath\(\s*(?:resultDelegate\.)?modelData\.icon\s*\?\?\s*\"\"\s*,\s*"
-            r"\"application-x-executable\"\s*\)",
-            "Desktop entry icon names must be resolved with an executable icon fallback",
+            r"source\s*:\s*AppIcon\.sourceFor\(\s*(?:resultDelegate\.)?modelData\.icon\s*\?\?\s*\"\"\s*\)",
+            "Desktop entry icon names must be resolved through the AppIcon service",
         )
+        service = APP_ICON_QML.read_text(encoding="utf-8")
+        self.assertIn(
+            'fallbackIcon: "application-x-executable"',
+            service,
+            "The AppIcon service must keep an executable icon fallback",
+        )
+        self.assertRegex(
+            service,
+            r"AppIconLogic\.resolve\(\s*icon\s*,\s*root\.index\s*\)",
+            "The app's own icon must be resolved before the theme fallback",
+        )
+        self.assertRegex(
+            service,
+            r"Quickshell\.iconPath\([^)]*root\.fallbackIcon",
+            "The theme fallback must keep the executable icon as its last resort",
+        )
+
+    def test_app_icon_singleton_is_registered(self) -> None:
+        qmldir = SERVICES_QMLDIR.read_text(encoding="utf-8")
+        self.assertIn("singleton AppIcon AppIcon.qml", qmldir)
 
     def test_launcher_exposes_all_sorted_matching_results(self) -> None:
         source = LAUNCHER_QML.read_text(encoding="utf-8")
